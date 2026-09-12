@@ -38,7 +38,7 @@ Open the dashboard at `/` after signing in. **Edit profile** lets you change you
 
 Use **My links** to add destinations, edit labels and URLs, choose a social platform, change the order, and enable or disable individual links. Supported platforms include Instagram, X/Twitter, TikTok, YouTube, LinkedIn, GitHub, Spotify, websites, and email. A profile supports up to 30 links.
 
-Use **Appearance** to select a theme or custom background color. The live preview shows your pending edits. Choose **Save changes** to persist them. Turn on **Publish your page** in the profile settings, save, and use **Open your page** to visit the generated public address. Visitors receive only published profiles and enabled links.
+Use **Appearance** to select a theme or custom background color. The live preview shows your pending edits. For a private profile, choose **Save draft** to keep your work private, or **Publish page** in the sticky top bar to save your edits and make the page public. After publishing, use **Save changes** for updates and **View page** to visit your public address. You can make it private again with the publication switch in Settings and save. Visitors receive only published profiles and enabled links.
 
 The interface theme control offers **Light**, **Dark**, and **System**. System follows your device preference. The choice is saved in this browser under `linkboard.theme`; it contains only a display preference. Your public profile's background and theme remain controlled by the profile owner through **Appearance**.
 
@@ -208,8 +208,8 @@ The [Pages workflow](.github/workflows/pages.yml) publishes an installation guid
 ### 6. Create users, publish profiles, and verify sharing
 
 1. Open [Create account / Sign in](https://20sha07.github.io/linkboard/login/), choose **Create account**, and register with your email and a password of 12–128 characters. Confirm the email if required, then sign in.
-2. Use **Edit profile**, **My links**, and **Appearance** to set your name, biography, avatar URL, links, and background. Select **Save changes**.
-3. Turn on **Publish your page**, save, and select **Open your page**. The app creates your address automatically, such as `/linkboard/u/?username=your-name`.
+2. Use **Edit profile**, **My links**, and **Appearance** to set your name, biography, avatar URL, links, and background. Select **Save draft** to save while keeping your page private.
+3. Select **Publish page** in the top bar, then **View page**. The app creates your address automatically, such as `/linkboard/u/?username=your-name`.
 4. Open that address while signed out, click a social link, then return to **Analytics** in your dashboard and refresh. Download the PNG in **QR code** and scan it from a second device to check the final deployed address.
 5. Another person repeats account registration with a different email. They receive a separate unpublished profile and private dashboard; you do not create another Supabase project or edit JSON for them.
 

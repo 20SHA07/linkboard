@@ -409,6 +409,9 @@ a {
   margin-left: var(--sidebar);
 }
 .topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
   height: 84px;
   border-bottom: 1px solid var(--line);
   background: #fcfcfa;
@@ -420,12 +423,16 @@ a {
 }
 .breadcrumbs {
   display: flex;
+  min-width: 0;
   align-items: center;
   gap: 13px;
   font-size: 11px;
   color: #9b9f93;
 }
 .breadcrumbs strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: #59634f;
   font-weight: 500;
 }
@@ -434,6 +441,8 @@ a {
 }
 .topbar-actions {
   display: flex;
+  align-items: center;
+  flex-shrink: 0;
   gap: 10px;
 }
 .topbar-actions .button {
@@ -460,6 +469,7 @@ a {
   margin: 0 auto;
 }
 .editor-column {
+  scroll-margin-top: 100px;
   padding: 37px 36px 0;
   min-width: 0;
 }

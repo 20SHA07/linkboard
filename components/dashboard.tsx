@@ -103,6 +103,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   const [toast, setToast] = useState('');
   const [error, setError] = useState('');
   const [origin, setOrigin] = useState('');
@@ -118,6 +119,7 @@ export default function Dashboard() {
   const loadedAccount = useRef<string | null>(null);
   const loadSequence = useRef(0);
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const saveErrorRef = useRef<HTMLDivElement>(null);
   const dirty =
     profile && savedProfile ? JSON.stringify(profile) !== JSON.stringify(savedProfile) : false;
   const initialize = useCallback(async () => {
@@ -198,6 +200,10 @@ export default function Dashboard() {
     return () => clearTimeout(timer);
   }, [toast]);
   useEffect(() => {
+    // The sticky save/publish action can be used while its error summary is offscreen.
+    if (error) saveErrorRef.current?.scrollIntoView({ block: 'center' });
+  }, [error]);
+  useEffect(() => {
     const warn = (e: BeforeUnloadEvent) => {
       if (dirty) {
         e.preventDefault();
@@ -222,22 +228,36 @@ export default function Dashboard() {
     setProfile((p) => (p ? { ...p, ...values } : p));
     setError('');
   }
-  async function save() {
+  async function save(published?: boolean) {
     if (!profile || saving) return;
-    const issue = validateProfile(profile);
+    const snapshot = structuredClone(profile);
+    if (published !== undefined) snapshot.published = published;
+    const issue = validateProfile(snapshot);
     if (issue) {
       setError(issue);
       return;
     }
-    const snapshot = structuredClone(profile);
     const sequence = loadSequence.current;
     setSaving(true);
+    setPublishing(snapshot.published && !savedProfile?.published);
     setError('');
     try {
       await saveProfile(snapshot);
       if (sequence !== loadSequence.current) return;
       setSavedProfile(snapshot);
-      setToast(snapshot.published ? 'Your changes are live.' : 'Your private profile is saved.');
+      if (published !== undefined) {
+        // Keep edits made while saving; only reconcile the explicit visibility change.
+        setProfile((current) =>
+          current?.id === snapshot.id ? { ...current, published: snapshot.published } : current,
+        );
+      }
+      setToast(
+        snapshot.published
+          ? savedProfile?.published
+            ? 'Your changes are live.'
+            : 'Your page is published. Ready to share!'
+          : 'Your private profile is saved.',
+      );
     } catch (e) {
       if (sequence !== loadSequence.current) return;
       setError(e instanceof Error ? e.message : 'Changes couldn’t be saved. Please try again.');
@@ -495,18 +515,36 @@ export default function Dashboard() {
               </button>
             )}
             <button
-              className="button primary save-button"
-              onClick={() => void save()}
-              disabled={saving || !dirty}
+              className={`button primary ${savedProfile?.published ? 'save-button' : 'publish-button'}`}
+              onClick={() => void save(savedProfile?.published ? undefined : true)}
+              disabled={saving || (Boolean(savedProfile?.published) && !dirty)}
+              title={
+                savedProfile?.published
+                  ? 'Save your changes'
+                  : 'Save your edits and publish your page'
+              }
+              aria-busy={saving}
             >
               {saving ? (
-                <Loader2 className="spin" size={16} />
+                <Loader2 className="spin" size={16} aria-hidden="true" />
+              ) : !savedProfile?.published ? (
+                <ArrowUpRight size={16} aria-hidden="true" />
               ) : dirty ? (
                 <Check size={16} />
               ) : (
                 <CheckCheck size={16} />
               )}
-              <span>{saving ? 'Saving…' : dirty ? 'Save changes' : 'All changes saved'}</span>
+              <span>
+                {saving
+                  ? publishing
+                    ? 'Publishing…'
+                    : 'Saving…'
+                  : !savedProfile?.published
+                    ? 'Publish page'
+                    : dirty
+                      ? 'Save changes'
+                      : 'All changes saved'}
+              </span>
             </button>
           </div>
         </header>
@@ -540,14 +578,14 @@ export default function Dashboard() {
             {!savedProfile?.published && (
               <div className="draft-banner">
                 <span className="status-dot" />
-                <span>Your page is private until you publish it.</span>
-                <button onClick={() => setTab('settings')}>
-                  Publishing settings <ArrowUpRight size={12} />
+                <span>Your page is private. Use Publish page above when you’re ready.</span>
+                <button onClick={() => void save(false)} disabled={saving || !dirty}>
+                  Save draft <Check size={12} aria-hidden="true" />
                 </button>
               </div>
             )}
             {error && (
-              <div className="alert error" role="alert">
+              <div className="alert error" role="alert" ref={saveErrorRef}>
                 {error}
                 <button
                   className="icon-button"
@@ -1051,6 +1089,7 @@ export default function Dashboard() {
                       role="switch"
                       aria-checked={profile.published}
                       aria-label="Publish your page"
+                      disabled={saving}
                       onClick={() => update({ published: !profile.published })}
                     >
                       <span />
@@ -1242,7 +1281,7 @@ export default function Dashboard() {
             </a>
             {!savedProfile?.published && (
               <p className="field-help">
-                Your page is private. Publish it in Settings before sharing this code.
+                Your page is private. Use Publish page in the top bar before sharing this code.
               </p>
             )}
           </div>

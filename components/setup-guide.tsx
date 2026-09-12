@@ -208,8 +208,8 @@ export default function SetupGuide() {
                     </a>
                     <p>
                       Choose <strong>Create an account</strong>, confirm your email, and sign in.
-                      Add your name, bio, avatar, and links; choose a theme; turn on{' '}
-                      <strong>Publish your page</strong> and save. Each person registers their own
+                      Add your name, bio, avatar, and links; choose a theme; select{' '}
+                      <strong>Publish page</strong> in the top bar. Each person registers their own
                       account on this same site.
                     </p>
                     <p>
