@@ -3,16 +3,11 @@
 import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js';
 import type { Account, ClickEvent, Profile, SocialLink, Theme } from './types';
 import { validateEmail, validateProfile, validateUsername } from './validation';
-import { appPath, isStaticExport } from './urls';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || '';
-const supabaseKey =
-  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim() ||
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ||
-  '';
+import { appPath } from './urls';
+import { supabaseUrl, supabaseKey, usesSupabase } from './backend-config';
 
 /** Self-hosted installations use the real server API; configured sites use Supabase. */
-export const usesSupabase = isStaticExport || Boolean(supabaseUrl || supabaseKey);
+export { usesSupabase } from './backend-config';
 let client: SupabaseClient | undefined;
 
 async function api<T>(path: string, method = 'GET', body?: unknown): Promise<T> {

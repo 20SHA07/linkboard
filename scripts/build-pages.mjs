@@ -43,30 +43,35 @@ export function isPublicSupabaseKey(key) {
 /** @param {Record<string, string | undefined>} [environment] */
 export function readPagesConfiguration(environment = process.env) {
   const supabaseUrl = environment.NEXT_PUBLIC_SUPABASE_URL?.trim() || '';
-  const supabaseKey =
-    environment.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim() ||
-    environment.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ||
-    '';
-  if (!supabaseUrl || !supabaseKey)
+  const suppliedKeys = [
+    environment.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim() || '',
+    environment.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() || '',
+  ].filter(Boolean);
+  const supabaseKey = suppliedKeys[0] || '';
+  if (Boolean(supabaseUrl) !== Boolean(supabaseKey))
     throw new Error(
-      'GitHub Pages requires NEXT_PUBLIC_SUPABASE_URL and a public Supabase key. Configure a real Supabase project before building.',
+      'Supabase configuration is incomplete. Set NEXT_PUBLIC_SUPABASE_URL and a public Supabase key together, or leave both empty to publish the setup page.',
     );
-  let backend;
-  try {
-    backend = new URL(supabaseUrl);
-  } catch {
-    throw new Error('NEXT_PUBLIC_SUPABASE_URL must be an HTTPS origin.');
+  let backendOrigin = '';
+  if (supabaseUrl) {
+    let backend;
+    try {
+      backend = new URL(supabaseUrl);
+    } catch {
+      throw new Error('NEXT_PUBLIC_SUPABASE_URL must be an HTTPS origin.');
+    }
+    if (
+      backend.protocol !== 'https:' ||
+      backend.username ||
+      backend.password ||
+      backend.pathname !== '/' ||
+      backend.search ||
+      backend.hash
+    )
+      throw new Error('NEXT_PUBLIC_SUPABASE_URL must be an HTTPS origin.');
+    backendOrigin = backend.origin;
   }
-  if (
-    backend.protocol !== 'https:' ||
-    backend.username ||
-    backend.password ||
-    backend.pathname !== '/' ||
-    backend.search ||
-    backend.hash
-  )
-    throw new Error('NEXT_PUBLIC_SUPABASE_URL must be an HTTPS origin.');
-  if (!isPublicSupabaseKey(supabaseKey))
+  if (suppliedKeys.some((key) => !isPublicSupabaseKey(key)))
     throw new Error(
       'Only a Supabase publishable key or anon JWT may enter a Pages build. Secret and service-role keys are forbidden.',
     );
@@ -97,7 +102,13 @@ export function readPagesConfiguration(environment = process.env) {
     )
       throw new Error('NEXT_PUBLIC_SITE_URL must be an HTTPS origin without a project path.');
   }
-  return { supabaseUrl: backend.origin, supabaseKey, basePath, siteUrl };
+  return {
+    supabaseUrl: backendOrigin,
+    supabaseKey,
+    configured: Boolean(backendOrigin && supabaseKey),
+    basePath,
+    siteUrl,
+  };
 }
 
 function assertWorkspacePath(path) {
@@ -198,7 +209,7 @@ export async function buildPages() {
       NEXT_TELEMETRY_DISABLED: '1',
     });
     const exported = assertWorkspacePath(join(stage, 'out'));
-    for (const file of ['index.html', 'login/index.html', 'u/index.html', '404.html']) {
+    for (const file of ['index.html', 'login/index.html', 'setup/index.html', 'u/index.html', '404.html']) {
       if (!existsSync(join(exported, file)))
         throw new Error(`The Pages build is missing its ${file} entry point.`);
     }
@@ -220,7 +231,9 @@ export async function buildPages() {
     }
     if (previousOutput) removeGenerated(previousOutput);
     console.log(
-      'GitHub Pages export is ready in out-pages/. Accounts and data use the configured Supabase project.',
+      configuration.configured
+        ? 'GitHub Pages export is ready in out-pages/. Accounts and data use the configured Supabase project.'
+        : 'GitHub Pages export is ready in out-pages/. The app displays setup instructions until Supabase is configured; accounts and profile data are unavailable.',
     );
   } finally {
     // Detach the dependency junction first; never recursively traverse it.

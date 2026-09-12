@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowRight, Loader2 } from 'lucide-react';
 import { getCurrentUser, signIn, signUp } from '@/lib/data';
 import { validateEmail } from '@/lib/validation';
+import { needsBackendSetup } from '@/lib/backend-config';
 import ThemeToggle from './theme/toggle';
 
 export default function Login() {
@@ -12,11 +13,12 @@ export default function Login() {
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [checkingSession, setCheckingSession] = useState(true);
+  const [checkingSession, setCheckingSession] = useState(!needsBackendSetup);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   useEffect(() => {
+    if (needsBackendSetup) return;
     let active = true;
     void getCurrentUser()
       .then((user) => {
@@ -39,7 +41,7 @@ export default function Login() {
   }, [router]);
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (busy || checkingSession) return;
+    if (busy || checkingSession || needsBackendSetup) return;
     setError('');
     setMessage('');
     if (!validateEmail(email.trim())) {
@@ -111,6 +113,15 @@ export default function Login() {
               ? 'Sign in and pick up where you left off.'
               : 'Create an account. Bring your world together.'}
           </p>
+          {needsBackendSetup && (
+            <div className="auth-notice setup-auth-notice" role="status">
+              <strong>Account setup is pending.</strong>
+              <p>The site owner needs to connect Supabase before anyone can sign in or register.</p>
+              <Link href="/setup/">
+                Open the setup guide <ArrowRight size={14} aria-hidden="true" />
+              </Link>
+            </div>
+          )}
           <label htmlFor="auth-email">
             Email address
             <input
@@ -122,7 +133,7 @@ export default function Login() {
               autoComplete="email"
               autoCapitalize="none"
               spellCheck={false}
-              disabled={busy}
+              disabled={busy || needsBackendSetup}
               placeholder="you@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -139,7 +150,7 @@ export default function Login() {
               minLength={mode === 'signup' ? 12 : undefined}
               autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
               aria-describedby={mode === 'signup' ? 'password-help' : undefined}
-              disabled={busy}
+              disabled={busy || needsBackendSetup}
               placeholder={mode === 'signup' ? 'At least 12 characters' : 'Your password'}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -162,7 +173,7 @@ export default function Login() {
           )}
           <button
             className="button primary full-width"
-            disabled={busy || checkingSession}
+            disabled={busy || checkingSession || needsBackendSetup}
             type="submit"
             aria-busy={busy || checkingSession}
           >

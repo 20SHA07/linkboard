@@ -16,11 +16,32 @@ const jwt = (role: string, alg = 'HS256') =>
   ].join('.');
 
 describe('Pages build configuration boundary', () => {
-  it('refuses unconfigured static accounts instead of using local storage', () => {
-    expect(() => readPagesConfiguration({})).toThrow(/requires/i);
-    expect(() =>
-      readPagesConfiguration({ NEXT_PUBLIC_SUPABASE_URL: environment.NEXT_PUBLIC_SUPABASE_URL }),
-    ).toThrow(/requires/i);
+  it('allows a setup-only export without inventing a backend', () => {
+    expect(readPagesConfiguration({})).toEqual({
+      configured: false,
+      supabaseUrl: '',
+      supabaseKey: '',
+      basePath: '/linkboard',
+      siteUrl: '',
+    });
+  });
+
+  it('treats whitespace-only backend configuration as empty', () => {
+    expect(
+      readPagesConfiguration({
+        NEXT_PUBLIC_SUPABASE_URL: ' ',
+        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: '\t',
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: '\n',
+      }).configured,
+    ).toBe(false);
+  });
+
+  it.each([
+    { NEXT_PUBLIC_SUPABASE_URL: environment.NEXT_PUBLIC_SUPABASE_URL },
+    { NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: publicKey },
+    { NEXT_PUBLIC_SUPABASE_ANON_KEY: jwt('anon') },
+  ])('rejects partial backend configuration', (partial) => {
+    expect(() => readPagesConfiguration(partial)).toThrow(/incomplete/i);
   });
 
   it.each([
@@ -40,9 +61,28 @@ describe('Pages build configuration boundary', () => {
     expect(isPublicSupabaseKey(publicKey)).toBe(true);
     expect(isPublicSupabaseKey(jwt('anon'))).toBe(true);
     expect(readPagesConfiguration(environment)).toMatchObject({
+      configured: true,
+      supabaseUrl: environment.NEXT_PUBLIC_SUPABASE_URL,
+      supabaseKey: publicKey,
       basePath: '/linkboard',
       siteUrl: 'https://20sha07.github.io',
     });
+  });
+
+  it('rejects private credentials even when another public key takes precedence', () => {
+    expect(() =>
+      readPagesConfiguration({ ...environment, NEXT_PUBLIC_SUPABASE_ANON_KEY: jwt('service_role') }),
+    ).toThrow(/forbidden/i);
+  });
+
+  it('supports a legacy anon key without a publishable key', () => {
+    expect(
+      readPagesConfiguration({
+        ...environment,
+        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: '',
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: jwt('anon'),
+      }),
+    ).toMatchObject({ configured: true, supabaseKey: jwt('anon') });
   });
 
   it.each([
@@ -67,6 +107,13 @@ describe('Pages build configuration boundary', () => {
 
   it('allows a custom domain with no project path', () => {
     expect(readPagesConfiguration({ ...environment, NEXT_PUBLIC_BASE_PATH: '' }).basePath).toBe('');
+  });
+
+  it('still validates deployment paths when the backend is absent', () => {
+    expect(() => readPagesConfiguration({ NEXT_PUBLIC_BASE_PATH: '/../../private' })).toThrow(/path/i);
+    expect(() =>
+      readPagesConfiguration({ NEXT_PUBLIC_SITE_URL: 'https://20sha07.github.io/linkboard' }),
+    ).toThrow(/origin/i);
   });
 
   it('rejects a project path inside the canonical origin', () => {

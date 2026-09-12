@@ -1,5 +1,7 @@
 import { Suspense } from 'react';
 import StaticPublicProfile from '@/components/static-public-profile';
+import SetupGuide from '@/components/setup-guide';
+import { needsBackendSetup } from '@/lib/backend-config';
 
 export const metadata = {
   title: 'Profile',
@@ -8,6 +10,7 @@ export const metadata = {
 
 /** A single exported page can load profiles registered after the site was built. */
 export default function SharedProfilePage() {
+  if (needsBackendSetup) return <SetupGuide />;
   return (
     <Suspense
       fallback={
