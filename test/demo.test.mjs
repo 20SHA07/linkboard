@@ -41,7 +41,7 @@ test('Pages demo builds for repository subpaths with embedded assets and clear l
   const build=spawnSync(process.execPath,[script,dir],{encoding:'utf8'});assert.equal(build.status,0,build.stderr);
   const html=await readFile(join(dir,'index.html'),'utf8');
   assert(html.includes('<title>Linkboard | Interactive editor demo</title>'));
-  assert(html.includes('Accounts and public publishing require the hosted app.'));
+  assert(html.includes('Sign-in and public publishing are unavailable in this demo.'));
   const scripts=[...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)];
   assert.equal(scripts.length,1);assert(scripts.every(s=>!s[1].includes('src=')));
   assert(!/<link[^>]+rel="stylesheet"/i.test(html));

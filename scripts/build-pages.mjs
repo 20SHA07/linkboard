@@ -10,8 +10,7 @@ const built=spawnSync(process.execPath,[fileURLToPath(new URL('scripts/build-pre
 if(built.status!==0)process.exit(built.status||1);
 let html=await readFile(target,'utf8');
 html=html.replace('<title>Linkboard | Your links, your space</title>','<title>Linkboard | Interactive editor demo</title>')
-  .replace('<strong>Offline demo</strong>','<strong>Interactive demo</strong>')
-  .replace('Try the editor. Changes stay in this browser. Export your website in Settings to host it.','Changes stay in this browser. Accounts and public publishing require the hosted app. Export a website in Settings.');
+  .replace('<strong>Offline demo</strong>','<strong>Interactive demo</strong>');
 await writeFile(target,html);
 await writeFile(new URL('.nojekyll',directory),'');
 console.log('GitHub Pages demo prepared:',fileURLToPath(directory));

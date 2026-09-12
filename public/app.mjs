@@ -136,10 +136,10 @@ async function loadStats(){
 function download(content,filename,type){const url=URL.createObjectURL(content instanceof Blob?content:new Blob([content],{type}));const a=document.createElement('a');a.href=url;a.download=filename;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),3000);}
 function pageURL(){return state.page&&state.origin?state.origin+'/p/'+state.page.slug:'';}
 function renderShare(){
-  const ready=state.saved?.published&&!state.demo&&isHosted(state.origin),url=pageURL();$('public-url').value=state.demo?'Available after hosting your project':url;
+  const ready=state.saved?.published&&!state.demo&&isHosted(state.origin),url=pageURL();$('public-url').value=state.demo?'Public addresses are unavailable in this demo':url;
   $('download-svg').disabled=!ready;$('download-png').disabled=!ready;$('copy-url').disabled=state.demo||!state.saved?.published;$('native-share').hidden=!navigator.share||!ready;
   if(ready){$('editor-qr').innerHTML=createQR(url);$('qr-state').textContent='Ready for print. Scan once on your phone before using it on a poster.';}
-  else{$('editor-qr').innerHTML=icon('qr');$('qr-state').textContent=state.demo?'Run or deploy Linkboard to publish a page and make its QR code.':!state.saved?.published?'Publish your page first. Its QR code will appear here.':'Your page is running locally. Host the project on HTTPS to create a QR code others can scan.';}
+  else{$('editor-qr').innerHTML=icon('qr');$('qr-state').textContent=state.demo?'Public sharing and QR downloads are unavailable in this demo. You can save a copy of your page in Settings.':!state.saved?.published?'Publish your page first. Its QR code will appear here.':'A public page address is needed before a shareable QR code can appear here.';}
 }
 async function copyURL(){try{await navigator.clipboard.writeText(pageURL());toast('Page link copied.');}catch{$('public-url').focus();$('public-url').select();toast('Copy the selected address.');}}
 async function downloadPNG(){
@@ -154,7 +154,7 @@ async function downloadWebsite(){
   try{if(state.dirty&&!await savePage(state.page.published))return;let document;
     if(state.demo)document=globalThis.LINKBOARD_DEMO_WEBSITE(state.page);
     else{const response=await fetch('/api/pages/'+state.page.id+'/website',{credentials:'same-origin'});if(!response.ok){const result=await response.json();throw new Error(result.error||'The website could not be exported.');}document=await response.text();}
-    download(document,state.page.slug+'.html','text/html');toast('Website downloaded. Rename it index.html before uploading to a static host.');
+    download(document,state.page.slug+'.html','text/html');toast('Website downloaded. Export again whenever you want an updated copy.');
   }catch(error){toast(error.message);}finally{button.disabled=false;}
 }
 function customizeLink(id){

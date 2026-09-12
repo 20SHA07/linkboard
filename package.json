@@ -1,6 +1,6 @@
 {
   "name": "linkboard",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "private": true,
   "type": "module",
   "description": "A free, self-hostable link page platform with individual accounts and a desktop design studio.",
