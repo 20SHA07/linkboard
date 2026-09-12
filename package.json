@@ -1,19 +1,38 @@
 {
   "name": "linkboard",
-  "version": "2.1.1",
+  "version": "1.0.0",
   "private": true,
-  "type": "module",
-  "description": "A free, self-hostable link page platform with individual accounts and a desktop design studio.",
-  "engines": {
-    "node": ">=24.0.0"
-  },
   "scripts": {
-    "start": "node --env-file-if-exists=.env src/local.mjs",
-    "test": "node --test test/*.test.mjs",
-    "owner-key": "node scripts/owner-key.mjs",
-    "deploy": "node --env-file-if-exists=.env scripts/deploy.mjs",
-    "demo": "node scripts/build-preview.mjs",
-    "configure": "node scripts/configure.mjs",
-    "pages": "node scripts/build-pages.mjs"
+    "dev": "next dev --hostname 0.0.0.0",
+    "build": "next build",
+    "start": "next start --hostname 0.0.0.0",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fontsource-variable/dm-sans": "^5.3.0",
+    "@fontsource-variable/manrope": "^5.3.0",
+    "@supabase/supabase-js": "^2.57.0",
+    "lucide-react": "^0.468.0",
+    "next": "^16.0.0",
+    "qrcode": "^1.5.4",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@types/node": "^22.0.0",
+    "@types/qrcode": "^1.5.5",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "eslint": "^9.0.0",
+    "eslint-config-next": "^16.0.0",
+    "prettier": "^3.9.6",
+    "typescript": "^5.9.0",
+    "vitest": "^4.1.11"
+  },
+  "engines": {
+    "node": ">=22.0.0"
   }
 }
