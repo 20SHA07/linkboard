@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import MotionProvider from '@/components/motion/provider';
 import '@fontsource-variable/dm-sans';
 import '@fontsource-variable/manrope';
 import './globals.css';
@@ -16,7 +17,9 @@ export const viewport: Viewport = { width: 'device-width', initialScale: 1, them
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <MotionProvider>{children}</MotionProvider>
+      </body>
     </html>
   );
 }

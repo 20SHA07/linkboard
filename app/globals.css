@@ -266,6 +266,21 @@ a {
   color: #354e2e;
   font-weight: 650;
 }
+.animated-background-item {
+  position: relative;
+  isolation: isolate;
+}
+.animated-background-item.active {
+  background: transparent;
+}
+.nav-highlight {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: #e1e9d4;
+  z-index: -1;
+  pointer-events: none;
+}
 .nav-count {
   margin-left: auto;
   background: #f2f6e9;

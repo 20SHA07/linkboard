@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import type { Platform, Profile } from '@/lib/types';
 import { safeAvatarUrl, safeUrl } from '@/lib/validation';
+import { AnimatedGroup } from './motion/animated-group';
 
 const platformIcons = {
   website: Globe,
@@ -109,7 +110,7 @@ export default function ProfileCard({
       </div>
       <Heading className="profile-name">{profile.name || profile.username}</Heading>
       {profile.bio && <p className="profile-bio">{profile.bio}</p>}
-      <div className="profile-links">
+      <AnimatedGroup className="profile-links" disabled={compact}>
         {links.map((link) => {
           const Icon = platformIcons[link.platform] || Globe;
           return (
@@ -145,7 +146,7 @@ export default function ProfileCard({
         {links.length === 0 && (
           <p className="profile-empty">Something good is on the way. Check back soon.</p>
         )}
-      </div>
+      </AnimatedGroup>
       {showBrand && (
         <Link className="profile-brand" href="/">
           Made with <strong>linkboard</strong>

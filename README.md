@@ -4,6 +4,8 @@ A self-hostable link-in-bio application built with Next.js, React, TypeScript, S
 
 The default installation includes real authentication and a persistent SQLite database. It starts with no accounts or sample profiles. Supabase is an optional backend for serverless hosting or deployments that prefer managed authentication and Postgres.
 
+The interface uses adapted [Motion Primitives](https://github.com/ibelick/motion-primitives) effects for the navigation highlight, dashboard transitions, and public link entrances. They respect the device's reduced-motion preference. The selected components live in `components/motion/`, use the existing CSS, and retain their MIT attribution in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
 ## Start the application
 
 Install Node.js 24 and npm, then run:

@@ -36,6 +36,8 @@ import type { Account, ClickEvent, Platform, Profile, Theme } from '@/lib/types'
 import ProfileCard from './profile-card';
 import QRCode from './qr-code';
 import { PlatformIcon } from './icons';
+import { AnimatedBackground } from './motion/animated-background';
+import { TransitionPanel } from './motion/transition-panel';
 
 type Tab = 'links' | 'appearance' | 'analytics' | 'qr' | 'settings';
 const navigation = [
@@ -379,22 +381,25 @@ export default function Dashboard() {
         </div>
         <div className="nav-label">YOUR WORKSPACE</div>
         <nav aria-label="Main navigation">
-          {navigation.map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              className={`nav-item ${tab === id ? 'active' : ''}`}
-              onClick={() => {
-                setTab(id);
-                setMobileNav(false);
-                setError('');
-              }}
-              aria-current={tab === id ? 'page' : undefined}
-            >
-              <Icon size={19} />
-              <span>{label}</span>
-              {id === 'links' && <span className="nav-count">{profile.links.length}</span>}
-            </button>
-          ))}
+          <AnimatedBackground value={tab}>
+            {navigation.map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                data-id={id}
+                className={`nav-item ${tab === id ? 'active' : ''}`}
+                onClick={() => {
+                  setTab(id);
+                  setMobileNav(false);
+                  setError('');
+                }}
+                aria-current={tab === id ? 'page' : undefined}
+              >
+                <Icon size={19} />
+                <span>{label}</span>
+                {id === 'links' && <span className="nav-count">{profile.links.length}</span>}
+              </button>
+            ))}
+          </AnimatedBackground>
         </nav>
         <div className="sidebar-bottom">
           <div className="little-note">
@@ -551,62 +556,194 @@ export default function Dashboard() {
                 </button>
               </div>
             )}
-            {tab === 'links' && (
-              <>
-                <section className="profile-summary">
-                  <Avatar key={profile.avatarUrl} profile={profile} />
-                  <div className="profile-summary-info">
-                    <div className="summary-name">
-                      {profile.name}
-                      <span className="personal-badge">
-                        {savedProfile?.published ? 'Published' : 'Private'}
+            <TransitionPanel activeKey={`${profile.id}:${tab}`}>
+              {tab === 'links' && (
+                <>
+                  <section className="profile-summary">
+                    <Avatar key={profile.avatarUrl} profile={profile} />
+                    <div className="profile-summary-info">
+                      <div className="summary-name">
+                        {profile.name}
+                        <span className="personal-badge">
+                          {savedProfile?.published ? 'Published' : 'Private'}
+                        </span>
+                      </div>
+                      <p>
+                        {profile.bio.split('\n')[0] || 'A little introduction goes a long way.'}
+                      </p>
+                      <button className="profile-url" onClick={() => void copyUrl()}>
+                        <Link2 size={12} />
+                        <span>{displayUrl}</span>
+                        <Copy size={12} />
+                      </button>
+                    </div>
+                    <button className="button small-button" onClick={() => setTab('settings')}>
+                      Edit profile
+                    </button>
+                  </section>
+                  <div className="quick-stats">
+                    <div>
+                      <span className="stat-icon">
+                        <Link2 size={17} />
+                      </span>
+                      <span>
+                        <strong>{activeLinks}</strong>
+                        <small>Active links</small>
                       </span>
                     </div>
-                    <p>{profile.bio.split('\n')[0] || 'A little introduction goes a long way.'}</p>
-                    <button className="profile-url" onClick={() => void copyUrl()}>
-                      <Link2 size={12} />
-                      <span>{displayUrl}</span>
-                      <Copy size={12} />
+                    <span className="stat-divider" />
+                    <div>
+                      <span className="stat-icon">
+                        <MousePointer2 size={17} />
+                      </span>
+                      <span>
+                        <strong>{events.length.toLocaleString()}</strong>
+                        <small>Total clicks</small>
+                      </span>
+                    </div>
+                    <button className="stats-link" onClick={() => setTab('analytics')}>
+                      View analytics
+                      <ArrowUpRight size={15} />
                     </button>
                   </div>
-                  <button className="button small-button" onClick={() => setTab('settings')}>
-                    Edit profile
-                  </button>
-                </section>
-                <div className="quick-stats">
-                  <div>
-                    <span className="stat-icon">
-                      <Link2 size={17} />
-                    </span>
-                    <span>
-                      <strong>{activeLinks}</strong>
-                      <small>Active links</small>
-                    </span>
+                  <div className="section-heading">
+                    <div>
+                      <h2>
+                        Your links <span>{profile.links.length}</span>
+                      </h2>
+                      <p>A collection of things worth sharing.</p>
+                    </div>
+                    <button
+                      className="button primary"
+                      onClick={() => {
+                        setAddOpen(true);
+                        setNewLinkError('');
+                      }}
+                      disabled={profile.links.length >= 30}
+                    >
+                      <Plus size={17} />
+                      Add a link
+                    </button>
                   </div>
-                  <span className="stat-divider" />
-                  <div>
-                    <span className="stat-icon">
-                      <MousePointer2 size={17} />
-                    </span>
-                    <span>
-                      <strong>{events.length.toLocaleString()}</strong>
-                      <small>Total clicks</small>
-                    </span>
+                  <div className="link-list">
+                    {profile.links.map((link, index) => (
+                      <article
+                        className={`editor-link ${!link.enabled ? 'link-disabled' : ''}`}
+                        key={link.id}
+                      >
+                        <div className="reorder-controls">
+                          <GripVertical size={18} aria-hidden="true" />
+                          <div>
+                            <button
+                              aria-label={`Move ${link.title} up`}
+                              disabled={index === 0}
+                              onClick={() => moveLink(index, -1)}
+                            >
+                              <ArrowUp size={12} />
+                            </button>
+                            <button
+                              aria-label={`Move ${link.title} down`}
+                              disabled={index === profile.links.length - 1}
+                              onClick={() => moveLink(index, 1)}
+                            >
+                              <ArrowDown size={12} />
+                            </button>
+                          </div>
+                        </div>
+                        <div className={`link-platform platform-${link.platform}`}>
+                          <PlatformIcon platform={link.platform} />
+                        </div>
+                        <div className="link-inputs">
+                          <input
+                            aria-label={`Link ${index + 1} title`}
+                            value={link.title}
+                            maxLength={80}
+                            placeholder="Link title"
+                            onChange={(e) =>
+                              update({
+                                links: profile.links.map((l) =>
+                                  l.id === link.id ? { ...l, title: e.target.value } : l,
+                                ),
+                              })
+                            }
+                          />
+                          <input
+                            aria-label={`Link ${index + 1} URL`}
+                            value={link.url}
+                            maxLength={2048}
+                            placeholder="https://your-website.com"
+                            onChange={(e) =>
+                              update({
+                                links: profile.links.map((l) =>
+                                  l.id === link.id ? { ...l, url: e.target.value } : l,
+                                ),
+                              })
+                            }
+                          />
+                          <div className="link-meta">
+                            <span>
+                              <BarChart3 size={11} />
+                              {counts[link.id] || 0} clicks
+                            </span>
+                            <select
+                              aria-label={`Platform for ${link.title}`}
+                              value={link.platform}
+                              onChange={(e) =>
+                                update({
+                                  links: profile.links.map((l) =>
+                                    l.id === link.id
+                                      ? { ...l, platform: e.target.value as Platform }
+                                      : l,
+                                  ),
+                                })
+                              }
+                            >
+                              {platforms.map((p) => (
+                                <option key={p.value} value={p.value}>
+                                  {p.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                        <div className="link-actions">
+                          <button
+                            className={`toggle ${link.enabled ? 'on' : ''}`}
+                            role="switch"
+                            aria-checked={link.enabled}
+                            aria-label={`Show ${link.title || 'link'} on your page`}
+                            onClick={() =>
+                              update({
+                                links: profile.links.map((l) =>
+                                  l.id === link.id ? { ...l, enabled: !l.enabled } : l,
+                                ),
+                              })
+                            }
+                          >
+                            <span />
+                          </button>
+                          <button
+                            className="icon-button delete-button"
+                            aria-label={`Delete ${link.title || 'link'}`}
+                            onClick={() =>
+                              update({ links: profile.links.filter((l) => l.id !== link.id) })
+                            }
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      </article>
+                    ))}
                   </div>
-                  <button className="stats-link" onClick={() => setTab('analytics')}>
-                    View analytics
-                    <ArrowUpRight size={15} />
-                  </button>
-                </div>
-                <div className="section-heading">
-                  <div>
-                    <h2>
-                      Your links <span>{profile.links.length}</span>
-                    </h2>
-                    <p>A collection of things worth sharing.</p>
-                  </div>
+                  {profile.links.length === 0 && (
+                    <div className="empty-state">
+                      <Link2 size={28} />
+                      <h3>Your next chapter starts with a link.</h3>
+                      <p>Add your website, a favorite project, or somewhere to say hello.</p>
+                    </div>
+                  )}
                   <button
-                    className="button primary"
+                    className="add-another"
                     onClick={() => {
                       setAddOpen(true);
                       setNewLinkError('');
@@ -614,448 +751,322 @@ export default function Dashboard() {
                     disabled={profile.links.length >= 30}
                   >
                     <Plus size={17} />
-                    Add a link
+                    Add another link
                   </button>
-                </div>
-                <div className="link-list">
-                  {profile.links.map((link, index) => (
-                    <article
-                      className={`editor-link ${!link.enabled ? 'link-disabled' : ''}`}
-                      key={link.id}
-                    >
-                      <div className="reorder-controls">
-                        <GripVertical size={18} aria-hidden="true" />
-                        <div>
-                          <button
-                            aria-label={`Move ${link.title} up`}
-                            disabled={index === 0}
-                            onClick={() => moveLink(index, -1)}
-                          >
-                            <ArrowUp size={12} />
-                          </button>
-                          <button
-                            aria-label={`Move ${link.title} down`}
-                            disabled={index === profile.links.length - 1}
-                            onClick={() => moveLink(index, 1)}
-                          >
-                            <ArrowDown size={12} />
-                          </button>
-                        </div>
-                      </div>
-                      <div className={`link-platform platform-${link.platform}`}>
-                        <PlatformIcon platform={link.platform} />
-                      </div>
-                      <div className="link-inputs">
-                        <input
-                          aria-label={`Link ${index + 1} title`}
-                          value={link.title}
-                          maxLength={80}
-                          placeholder="Link title"
-                          onChange={(e) =>
-                            update({
-                              links: profile.links.map((l) =>
-                                l.id === link.id ? { ...l, title: e.target.value } : l,
-                              ),
-                            })
-                          }
-                        />
-                        <input
-                          aria-label={`Link ${index + 1} URL`}
-                          value={link.url}
-                          maxLength={2048}
-                          placeholder="https://your-website.com"
-                          onChange={(e) =>
-                            update({
-                              links: profile.links.map((l) =>
-                                l.id === link.id ? { ...l, url: e.target.value } : l,
-                              ),
-                            })
-                          }
-                        />
-                        <div className="link-meta">
-                          <span>
-                            <BarChart3 size={11} />
-                            {counts[link.id] || 0} clicks
-                          </span>
-                          <select
-                            aria-label={`Platform for ${link.title}`}
-                            value={link.platform}
-                            onChange={(e) =>
-                              update({
-                                links: profile.links.map((l) =>
-                                  l.id === link.id
-                                    ? { ...l, platform: e.target.value as Platform }
-                                    : l,
-                                ),
-                              })
-                            }
-                          >
-                            {platforms.map((p) => (
-                              <option key={p.value} value={p.value}>
-                                {p.label}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-                      <div className="link-actions">
-                        <button
-                          className={`toggle ${link.enabled ? 'on' : ''}`}
-                          role="switch"
-                          aria-checked={link.enabled}
-                          aria-label={`Show ${link.title || 'link'} on your page`}
-                          onClick={() =>
-                            update({
-                              links: profile.links.map((l) =>
-                                l.id === link.id ? { ...l, enabled: !l.enabled } : l,
-                              ),
-                            })
-                          }
-                        >
-                          <span />
-                        </button>
-                        <button
-                          className="icon-button delete-button"
-                          aria-label={`Delete ${link.title || 'link'}`}
-                          onClick={() =>
-                            update({ links: profile.links.filter((l) => l.id !== link.id) })
-                          }
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-                {profile.links.length === 0 && (
-                  <div className="empty-state">
-                    <Link2 size={28} />
-                    <h3>Your next chapter starts with a link.</h3>
-                    <p>Add your website, a favorite project, or somewhere to say hello.</p>
-                  </div>
-                )}
-                <button
-                  className="add-another"
-                  onClick={() => {
-                    setAddOpen(true);
-                    setNewLinkError('');
-                  }}
-                  disabled={profile.links.length >= 30}
-                >
-                  <Plus size={17} />
-                  Add another link
-                </button>
-                <p className="editor-tip">
-                  <Sparkles size={14} />A little tip: put your most important link at the top.
-                </p>
-              </>
-            )}
-            {tab === 'appearance' && (
-              <section className="settings-panel">
-                <div className="section-heading">
-                  <div>
-                    <h2>Pick your palette</h2>
-                    <p>Four thoughtful themes. One that feels just right.</p>
-                  </div>
-                </div>
-                <div className="theme-grid">
-                  {themes.map((t) => (
-                    <button
-                      className={`theme-option ${profile.theme === t.id ? 'selected' : ''}`}
-                      key={t.id}
-                      onClick={() => update({ theme: t.id, backgroundColor: t.color })}
-                      aria-pressed={profile.theme === t.id}
-                    >
-                      <div className="theme-sample" style={{ background: t.color }}>
-                        <span className="sample-avatar" style={{ background: t.accent }} />
-                        <span style={{ background: t.accent }} />
-                        <span style={{ background: t.accent }} />
-                        <span style={{ background: t.accent }} />
-                      </div>
-                      <span>
-                        {t.name}
-                        {profile.theme === t.id && <Check size={15} />}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-                <div className="custom-color-row">
-                  <div>
-                    <h3>Something a little more you?</h3>
-                    <p>Choose your own background color.</p>
-                  </div>
-                  <label className="color-input">
-                    <input
-                      type="color"
-                      aria-label="Custom background color"
-                      value={profile.backgroundColor}
-                      onChange={(e) => update({ backgroundColor: e.target.value, theme: 'custom' })}
-                    />
-                    <span>{profile.backgroundColor}</span>
-                  </label>
-                </div>
-                <p className="field-help">
-                  Your links and text automatically stay readable on your chosen background.
-                </p>
-              </section>
-            )}
-            {tab === 'analytics' && (
-              <section className="analytics-section">
-                <div className="section-heading">
-                  <div>
-                    <h2>Your page at a glance</h2>
-                    <p>Clicks across all browsers, stored securely for your account.</p>
-                  </div>
-                  <button
-                    className="button small-button"
-                    disabled={refreshing}
-                    onClick={() => void refreshAnalytics()}
-                  >
-                    {refreshing ? 'Refreshing…' : 'Refresh'}
-                  </button>
-                </div>
-                <div className="analytics-cards">
-                  <div>
-                    <MousePointer2 size={20} />
-                    <strong>{events.length.toLocaleString()}</strong>
-                    <span>All-time clicks</span>
-                  </div>
-                  <div>
-                    <Link2 size={20} />
-                    <strong>
-                      {
-                        events.filter(
-                          (e) => analyticsNow - new Date(e.timestamp).getTime() < 7 * 86400000,
-                        ).length
-                      }
-                    </strong>
-                    <span>Clicks this week</span>
-                  </div>
-                  <div>
-                    <BarChart3 size={20} />
-                    <strong>{new Set(events.map((e) => e.linkId)).size}</strong>
-                    <span>Links visited</span>
-                  </div>
-                </div>
-                <div className="chart-panel">
+                  <p className="editor-tip">
+                    <Sparkles size={14} />A little tip: put your most important link at the top.
+                  </p>
+                </>
+              )}
+              {tab === 'appearance' && (
+                <section className="settings-panel">
                   <div className="section-heading">
-                    <h3>Little moments of connection</h3>
-                    <select
-                      aria-label="Analytics period"
-                      value={analyticsDays}
-                      onChange={(e) => setAnalyticsDays(Number(e.target.value))}
-                    >
-                      <option value={7}>Last 7 days</option>
-                      <option value={30}>Last 30 days</option>
-                    </select>
+                    <div>
+                      <h2>Pick your palette</h2>
+                      <p>Four thoughtful themes. One that feels just right.</p>
+                    </div>
                   </div>
-                  <div
-                    className="bar-chart"
-                    role="img"
-                    aria-label={`${selectedEvents.length} clicks in the last ${analyticsDays} days`}
-                  >
-                    {Array.from({ length: analyticsDays }, (_, i) => {
-                      const d = new Date(analyticsNow);
-                      d.setDate(d.getDate() - analyticsDays + i + 1);
-                      const day = d.toLocaleDateString();
-                      const n = selectedEvents.filter(
-                        (e) => new Date(e.timestamp).toLocaleDateString() === day,
-                      ).length;
-                      const max = Math.max(1, selectedEvents.length);
-                      return (
-                        <div className="chart-day" key={i} title={`${day}: ${n} clicks`}>
-                          <div className="chart-bar-track">
-                            <div
-                              style={{ height: `${Math.max(2, (n / max) * 100)}%` }}
-                              className={n === 0 ? 'zero' : ''}
-                            />
+                  <div className="theme-grid">
+                    {themes.map((t) => (
+                      <button
+                        className={`theme-option ${profile.theme === t.id ? 'selected' : ''}`}
+                        key={t.id}
+                        onClick={() => update({ theme: t.id, backgroundColor: t.color })}
+                        aria-pressed={profile.theme === t.id}
+                      >
+                        <div className="theme-sample" style={{ background: t.color }}>
+                          <span className="sample-avatar" style={{ background: t.accent }} />
+                          <span style={{ background: t.accent }} />
+                          <span style={{ background: t.accent }} />
+                          <span style={{ background: t.accent }} />
+                        </div>
+                        <span>
+                          {t.name}
+                          {profile.theme === t.id && <Check size={15} />}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="custom-color-row">
+                    <div>
+                      <h3>Something a little more you?</h3>
+                      <p>Choose your own background color.</p>
+                    </div>
+                    <label className="color-input">
+                      <input
+                        type="color"
+                        aria-label="Custom background color"
+                        value={profile.backgroundColor}
+                        onChange={(e) =>
+                          update({ backgroundColor: e.target.value, theme: 'custom' })
+                        }
+                      />
+                      <span>{profile.backgroundColor}</span>
+                    </label>
+                  </div>
+                  <p className="field-help">
+                    Your links and text automatically stay readable on your chosen background.
+                  </p>
+                </section>
+              )}
+              {tab === 'analytics' && (
+                <section className="analytics-section">
+                  <div className="section-heading">
+                    <div>
+                      <h2>Your page at a glance</h2>
+                      <p>Clicks across all browsers, stored securely for your account.</p>
+                    </div>
+                    <button
+                      className="button small-button"
+                      disabled={refreshing}
+                      onClick={() => void refreshAnalytics()}
+                    >
+                      {refreshing ? 'Refreshing…' : 'Refresh'}
+                    </button>
+                  </div>
+                  <div className="analytics-cards">
+                    <div>
+                      <MousePointer2 size={20} />
+                      <strong>{events.length.toLocaleString()}</strong>
+                      <span>All-time clicks</span>
+                    </div>
+                    <div>
+                      <Link2 size={20} />
+                      <strong>
+                        {
+                          events.filter(
+                            (e) => analyticsNow - new Date(e.timestamp).getTime() < 7 * 86400000,
+                          ).length
+                        }
+                      </strong>
+                      <span>Clicks this week</span>
+                    </div>
+                    <div>
+                      <BarChart3 size={20} />
+                      <strong>{new Set(events.map((e) => e.linkId)).size}</strong>
+                      <span>Links visited</span>
+                    </div>
+                  </div>
+                  <div className="chart-panel">
+                    <div className="section-heading">
+                      <h3>Little moments of connection</h3>
+                      <select
+                        aria-label="Analytics period"
+                        value={analyticsDays}
+                        onChange={(e) => setAnalyticsDays(Number(e.target.value))}
+                      >
+                        <option value={7}>Last 7 days</option>
+                        <option value={30}>Last 30 days</option>
+                      </select>
+                    </div>
+                    <div
+                      className="bar-chart"
+                      role="img"
+                      aria-label={`${selectedEvents.length} clicks in the last ${analyticsDays} days`}
+                    >
+                      {Array.from({ length: analyticsDays }, (_, i) => {
+                        const d = new Date(analyticsNow);
+                        d.setDate(d.getDate() - analyticsDays + i + 1);
+                        const day = d.toLocaleDateString();
+                        const n = selectedEvents.filter(
+                          (e) => new Date(e.timestamp).toLocaleDateString() === day,
+                        ).length;
+                        const max = Math.max(1, selectedEvents.length);
+                        return (
+                          <div className="chart-day" key={i} title={`${day}: ${n} clicks`}>
+                            <div className="chart-bar-track">
+                              <div
+                                style={{ height: `${Math.max(2, (n / max) * 100)}%` }}
+                                className={n === 0 ? 'zero' : ''}
+                              />
+                            </div>
+                            {(analyticsDays === 7 || i % 5 === 0) && (
+                              <span>
+                                {d.toLocaleDateString(undefined, {
+                                  weekday: analyticsDays === 7 ? 'short' : undefined,
+                                  day: analyticsDays === 30 ? 'numeric' : undefined,
+                                })}
+                              </span>
+                            )}
                           </div>
-                          {(analyticsDays === 7 || i % 5 === 0) && (
-                            <span>
-                              {d.toLocaleDateString(undefined, {
-                                weekday: analyticsDays === 7 ? 'short' : undefined,
-                                day: analyticsDays === 30 ? 'numeric' : undefined,
-                              })}
-                            </span>
-                          )}
+                        );
+                      })}
+                    </div>
+                    {events.length === 0 && (
+                      <p className="chart-empty">
+                        Your story is just starting. Share your page to see your first clicks.
+                      </p>
+                    )}
+                  </div>
+                  <div className="analytics-table">
+                    <h3>Link performance</h3>
+                    <div className="table-row table-head">
+                      <span>Link</span>
+                      <span>Last click</span>
+                      <span>Clicks</span>
+                    </div>
+                    {profile.links.map((l) => {
+                      const recent = events
+                        .filter((e) => e.linkId === l.id)
+                        .sort((a, b) => b.timestamp.localeCompare(a.timestamp))[0];
+                      return (
+                        <div className="table-row" key={l.id}>
+                          <span>
+                            <PlatformIcon platform={l.platform} size={16} />
+                            {l.title}
+                          </span>
+                          <span>
+                            {recent
+                              ? new Date(recent.timestamp).toLocaleString(undefined, {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })
+                              : 'No clicks yet'}
+                          </span>
+                          <strong>{counts[l.id] || 0}</strong>
                         </div>
                       );
                     })}
                   </div>
-                  {events.length === 0 && (
-                    <p className="chart-empty">
-                      Your story is just starting. Share your page to see your first clicks.
-                    </p>
-                  )}
-                </div>
-                <div className="analytics-table">
-                  <h3>Link performance</h3>
-                  <div className="table-row table-head">
-                    <span>Link</span>
-                    <span>Last click</span>
-                    <span>Clicks</span>
-                  </div>
-                  {profile.links.map((l) => {
-                    const recent = events
-                      .filter((e) => e.linkId === l.id)
-                      .sort((a, b) => b.timestamp.localeCompare(a.timestamp))[0];
-                    return (
-                      <div className="table-row" key={l.id}>
-                        <span>
-                          <PlatformIcon platform={l.platform} size={16} />
-                          {l.title}
-                        </span>
-                        <span>
-                          {recent
-                            ? new Date(recent.timestamp).toLocaleString(undefined, {
-                                month: 'short',
-                                day: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })
-                            : 'No clicks yet'}
-                        </span>
-                        <strong>{counts[l.id] || 0}</strong>
-                      </div>
-                    );
-                  })}
-                </div>
-                <p className="field-help">
-                  Click totals count interactions, not unique visitors. Analytics doesn’t store
-                  visitor identities or use tracking cookies.
-                </p>
-              </section>
-            )}
-            {tab === 'qr' && (
-              <section className="settings-panel qr-settings">
-                <div className="qr-intro">
-                  <span className="feature-icon">
-                    <QrIcon size={26} />
-                  </span>
-                  <h2>Your world. One scan away.</h2>
-                  <p>
-                    Put it on your business card, your packaging,
-                    <br />
-                    or wherever your next connection happens.
+                  <p className="field-help">
+                    Click totals count interactions, not unique visitors. Analytics doesn’t store
+                    visitor identities or use tracking cookies.
                   </p>
-                </div>
-                {pageUrl ? (
-                  <QRCode url={pageUrl} name={savedProfile?.username} size={240} downloadable />
-                ) : (
-                  <p>Preparing your page URL…</p>
-                )}
-                <div className="copy-url-field">
-                  <input aria-label="Public page URL" readOnly value={pageUrl} />
-                  <button
-                    className="icon-button"
-                    onClick={() => void copyUrl()}
-                    aria-label="Copy public page URL"
-                  >
-                    <Copy size={17} />
-                  </button>
-                </div>
-                <p className="field-help">
-                  This code points to your saved page address. Save changes after updating your
-                  username, then download a fresh code.
-                </p>
-              </section>
-            )}
-            {tab === 'settings' && (
-              <form
-                className="settings-panel profile-form"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  void save();
-                }}
-              >
-                <div className="section-heading">
-                  <div>
-                    <h2>A little introduction</h2>
-                    <p>The person behind all the good things.</p>
+                </section>
+              )}
+              {tab === 'qr' && (
+                <section className="settings-panel qr-settings">
+                  <div className="qr-intro">
+                    <span className="feature-icon">
+                      <QrIcon size={26} />
+                    </span>
+                    <h2>Your world. One scan away.</h2>
+                    <p>
+                      Put it on your business card, your packaging,
+                      <br />
+                      or wherever your next connection happens.
+                    </p>
                   </div>
-                  <Avatar key={profile.avatarUrl} profile={profile} />
-                </div>
-                <label>
-                  Display name
-                  <input
-                    value={profile.name}
-                    maxLength={60}
-                    required
-                    onChange={(e) => update({ name: e.target.value })}
-                    autoComplete="name"
-                  />
-                </label>
-                <label>
-                  Your bio
-                  <textarea
-                    rows={3}
-                    value={profile.bio}
-                    maxLength={280}
-                    onChange={(e) => update({ bio: e.target.value })}
-                  />
-                  <span className="field-help">
-                    A sentence or two is perfect. {profile.bio.length}/280
-                  </span>
-                </label>
-                <label>
-                  Profile image URL
-                  <input
-                    type="url"
-                    placeholder="https://example.com/your-photo.jpg"
-                    value={profile.avatarUrl}
-                    maxLength={2048}
-                    onChange={(e) => update({ avatarUrl: e.target.value })}
-                  />
-                  <span className="field-help">
-                    Use an HTTPS image URL. Leave blank for a simple initials avatar.
-                  </span>
-                </label>
-                <label>
-                  Username
-                  <div className="username-input">
-                    <span>/u/</span>
+                  {pageUrl ? (
+                    <QRCode url={pageUrl} name={savedProfile?.username} size={240} downloadable />
+                  ) : (
+                    <p>Preparing your page URL…</p>
+                  )}
+                  <div className="copy-url-field">
+                    <input aria-label="Public page URL" readOnly value={pageUrl} />
+                    <button
+                      className="icon-button"
+                      onClick={() => void copyUrl()}
+                      aria-label="Copy public page URL"
+                    >
+                      <Copy size={17} />
+                    </button>
+                  </div>
+                  <p className="field-help">
+                    This code points to your saved page address. Save changes after updating your
+                    username, then download a fresh code.
+                  </p>
+                </section>
+              )}
+              {tab === 'settings' && (
+                <form
+                  className="settings-panel profile-form"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void save();
+                  }}
+                >
+                  <div className="section-heading">
+                    <div>
+                      <h2>A little introduction</h2>
+                      <p>The person behind all the good things.</p>
+                    </div>
+                    <Avatar key={profile.avatarUrl} profile={profile} />
+                  </div>
+                  <label>
+                    Display name
                     <input
-                      value={profile.username}
-                      minLength={3}
-                      maxLength={30}
-                      pattern="[a-z0-9]+(-[a-z0-9]+)*"
+                      value={profile.name}
+                      maxLength={60}
                       required
-                      onChange={(e) => update({ username: e.target.value.toLowerCase() })}
+                      onChange={(e) => update({ name: e.target.value })}
+                      autoComplete="name"
                     />
+                  </label>
+                  <label>
+                    Your bio
+                    <textarea
+                      rows={3}
+                      value={profile.bio}
+                      maxLength={280}
+                      onChange={(e) => update({ bio: e.target.value })}
+                    />
+                    <span className="field-help">
+                      A sentence or two is perfect. {profile.bio.length}/280
+                    </span>
+                  </label>
+                  <label>
+                    Profile image URL
+                    <input
+                      type="url"
+                      placeholder="https://example.com/your-photo.jpg"
+                      value={profile.avatarUrl}
+                      maxLength={2048}
+                      onChange={(e) => update({ avatarUrl: e.target.value })}
+                    />
+                    <span className="field-help">
+                      Use an HTTPS image URL. Leave blank for a simple initials avatar.
+                    </span>
+                  </label>
+                  <label>
+                    Username
+                    <div className="username-input">
+                      <span>/u/</span>
+                      <input
+                        value={profile.username}
+                        minLength={3}
+                        maxLength={30}
+                        pattern="[a-z0-9]+(-[a-z0-9]+)*"
+                        required
+                        onChange={(e) => update({ username: e.target.value.toLowerCase() })}
+                      />
+                    </div>
+                    <span className="field-help">
+                      3–30 lowercase letters, numbers, or hyphens. Changing this changes your public
+                      URL and QR code.
+                    </span>
+                  </label>
+                  <div className="setting-switch">
+                    <div>
+                      <strong>Publish your page</strong>
+                      <p>Make your profile and enabled links visible to everyone.</p>
+                    </div>
+                    <button
+                      type="button"
+                      className={`toggle ${profile.published ? 'on' : ''}`}
+                      role="switch"
+                      aria-checked={profile.published}
+                      aria-label="Publish your page"
+                      onClick={() => update({ published: !profile.published })}
+                    >
+                      <span />
+                    </button>
                   </div>
-                  <span className="field-help">
-                    3–30 lowercase letters, numbers, or hyphens. Changing this changes your public
-                    URL and QR code.
-                  </span>
-                </label>
-                <div className="setting-switch">
-                  <div>
-                    <strong>Publish your page</strong>
-                    <p>Make your profile and enabled links visible to everyone.</p>
-                  </div>
-                  <button
-                    type="button"
-                    className={`toggle ${profile.published ? 'on' : ''}`}
-                    role="switch"
-                    aria-checked={profile.published}
-                    aria-label="Publish your page"
-                    onClick={() => update({ published: !profile.published })}
-                  >
-                    <span />
+                  <button className="button primary" disabled={saving || !dirty} type="submit">
+                    {saving ? 'Saving…' : 'Save profile'}
+                    <Check size={16} />
                   </button>
-                </div>
-                <button className="button primary" disabled={saving || !dirty} type="submit">
-                  {saving ? 'Saving…' : 'Save profile'}
-                  <Check size={16} />
-                </button>
-              </form>
-            )}
-            <footer className="editor-footer">
-              <span>A home for everything you do.</span>
-              <span>
-                Made for you <span className="footer-spark">✳</span>
-              </span>
-            </footer>
+                </form>
+              )}
+              <footer className="editor-footer">
+                <span>A home for everything you do.</span>
+                <span>
+                  Made for you <span className="footer-spark">✳</span>
+                </span>
+              </footer>
+            </TransitionPanel>
           </main>
           <aside className="preview-column">
             <div className="preview-heading">
