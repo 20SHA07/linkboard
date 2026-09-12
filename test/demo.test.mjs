@@ -29,7 +29,7 @@ test('the standalone demo builds without external scripts and its complete modul
   const check=spawnSync(process.execPath,['--input-type=module','--check'],{input:module,encoding:'utf8'});assert.equal(check.status,0,check.stderr);
 });
 test('editor controls reference existing static or modal elements',async()=>{
-  const html=await readFile(new URL('../public/index.html',import.meta.url),'utf8'),app=await readFile(new URL('../public/app.mjs',import.meta.url),'utf8');
+  const html=await readFile(new URL('../public/editor.html',import.meta.url),'utf8'),app=await readFile(new URL('../public/app.mjs',import.meta.url),'utf8');
   const studio=await readFile(new URL('../public/studio.mjs',import.meta.url),'utf8');
   const ids=new Set([...`${html}\n${app}\n${studio}`.matchAll(/\bid="([a-z][a-z0-9-]*)"/g)].map(m=>m[1]));
   const missing=[...app.matchAll(/\$\('([a-z][a-z0-9-]*)'\)/g)].map(m=>m[1]).filter(id=>!ids.has(id));assert.deepEqual([...new Set(missing)],[]);

@@ -1,3 +1,4 @@
+import { mockAuth,AUTH,OWNER,PASSWORD } from './helpers/auth-provider.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, mkdtemp, rm } from 'node:fs/promises';
@@ -13,7 +14,7 @@ import { createQR } from '../public/qr.mjs';
 
 const KEY='a6bc74dd00d536cf691211171a0b3719de6c2ca461bca216be119b7bd99ff427';
 function fixture(t){
-  const env={DB:openDatabase(),ADMIN_KEY:KEY,ASSETS:{async fetch(request){const file=new URL(request.url).pathname.slice(1)||'index.html';return new Response(await readFile(new URL('../public/'+file,import.meta.url)),{headers:{'content-type':file.endsWith('.mjs')?'text/javascript':'text/html'}});}}};
+  const provider=mockAuth();const env={...AUTH,AUTH_FETCH:provider.fetch,DB:openDatabase(),ADMIN_KEY:KEY,ASSETS:{async fetch(request){const file=new URL(request.url).pathname.slice(1)||'index.html';return new Response(await readFile(new URL('../public/'+file,import.meta.url)),{headers:{'content-type':file.endsWith('.mjs')?'text/javascript':'text/html'}});}}};
   t.after(()=>env.DB.close());let cookie='';
   async function call(path,method='GET',body,options={}){
     const headers={'content-type':'application/json','x-linkboard':'1',origin:'https://links.example.org','user-agent':'Mozilla/5.0',...(options.auth===false?{}:{cookie}),...options.headers};
@@ -22,7 +23,7 @@ function fixture(t){
     const response=await worker.fetch(request,env);const setCookie=response.headers.get('set-cookie');if(setCookie)cookie=setCookie.split(';')[0];const text=await response.text();let data;try{data=JSON.parse(text);}catch{}
     return {status:response.status,headers:response.headers,text,data};
   }
-  return {env,call,login:()=>call('/api/login','POST',{key:KEY}),cookie:()=>cookie};
+  return {env,call,login:async()=>{const result=await call('/api/login','POST',{email:OWNER,password:PASSWORD});if(result.status===200)await call('/api/account/claim','POST',{key:KEY});return result;},cookie:()=>cookie};
 }
 async function livePage(f){await f.login();const p=(await f.call('/api/pages/qmc-starter')).data.page;p.links[0].url='https://example.com/social';p.links[0].enabled=true;p.published=true;return (await f.call('/api/pages/'+p.id,'PUT',p)).data.page;}
 
@@ -31,17 +32,17 @@ test('private editor API requires a session; public draft and draft links stay p
   for(const path of ['/api/pages','/api/pages/qmc-starter','/api/pages/qmc-starter/preview','/api/pages/qmc-starter/export','/api/pages/qmc-starter/website'])assert.equal((await f.call(path)).status,401,path);
   assert.equal((await f.call('/p/qmc')).status,404);assert.equal((await f.call('/go/qmc/qmc-instagram')).status,404);
   const session=await f.call('/api/session');assert.equal(session.data.authenticated,false);
-  const root=await f.call('/');assert.equal(root.status,200);assert(root.headers.get('content-security-policy').includes("script-src 'self'"));assert.equal(root.headers.get('x-robots-tag'),'noindex, nofollow');
+  const root=await f.call('/');assert.equal(root.status,200);assert(root.headers.get('content-security-policy').includes("script-src 'self'"));assert.equal(root.headers.get('x-robots-tag'),null);
 });
-test('owner login uses a secure cookie and server-side revocable sessions',async t=>{
-  const f=fixture(t);assert.equal((await f.call('/api/login','POST',{key:'wrong'})).status,401);
+test('account login uses a secure cookie and server-side revocable sessions',async t=>{
+  const f=fixture(t);assert.equal((await f.call('/api/login','POST',{email:OWNER,password:'wrong'})).status,401);
   const result=await f.login();assert.equal(result.status,200);for(const flag of ['__Host-linkboard=','HttpOnly','Secure','SameSite=Strict'])assert(result.headers.get('set-cookie').includes(flag));
   assert.equal((await f.call('/api/session')).data.authenticated,true);const original=f.cookie();
   assert.equal((await f.call('/api/logout','POST',{})).status,200);
   assert.equal((await f.call('/api/pages','GET',undefined,{headers:{cookie:original}})).status,401);
 });
-test('rotating the workspace key immediately invalidates existing sessions',async t=>{
-  const f=fixture(t);await f.login();f.env.ADMIN_KEY='f'.repeat(64);assert.equal((await f.call('/api/pages')).status,401);
+test('rotating the session encryption secret immediately invalidates existing sessions',async t=>{
+  const f=fixture(t);await f.login();f.env.SESSION_SECRET='f'.repeat(64);assert.equal((await f.call('/api/pages')).status,401);
 });
 test('CSRF guards reject cross-origin and non-app writes',async t=>{
   const f=fixture(t);await f.login();
@@ -50,7 +51,7 @@ test('CSRF guards reject cross-origin and non-app writes',async t=>{
   assert.equal((await f.call('/api/pages','POST',blankPage('New','new'),{headers:{'content-type':'text/plain'}})).status,415);
 });
 test('repeated incorrect login attempts are limited',async t=>{
-  const f=fixture(t);for(let i=0;i<10;i++)assert.equal((await f.call('/api/login','POST',{key:'wrong'})).status,401);
+  const f=fixture(t);for(let i=0;i<10;i++)assert.equal((await f.call('/api/login','POST',{email:OWNER,password:'wrong'})).status,401);
   assert.equal((await f.login()).status,429);
 });
 test('publishing validates links, then serves escaped HTML and working redirects',async t=>{
@@ -111,14 +112,16 @@ test('page deletion requires the typed address and removes dependent data',async
 });
 test('the real local server persists edits across restart without re-adding starter links',async t=>{
   const dir=await mkdtemp(join(tmpdir(),'linkboard-test-'));t.after(()=>rm(dir,{recursive:true,force:true}));
-  let server=await startServer({port:0,dataDir:dir,key:KEY,quiet:true});
-  const login=await fetch(server.origin+'/api/login',{method:'POST',headers:{origin:server.origin,'content-type':'application/json','x-linkboard':'1'},body:JSON.stringify({key:KEY})});
+  const provider=mockAuth();
+  let server=await startServer({port:0,dataDir:dir,key:KEY,quiet:true,auth:AUTH,authFetch:provider.fetch});
+  const login=await fetch(server.origin+'/api/login',{method:'POST',headers:{origin:server.origin,'content-type':'application/json','x-linkboard':'1'},body:JSON.stringify({email:OWNER,password:PASSWORD})});
   assert.equal(login.status,200);const cookie=login.headers.get('set-cookie').split(';')[0];const headers={cookie,origin:server.origin,'content-type':'application/json','x-linkboard':'1'};
+  assert.equal((await fetch(server.origin+'/api/account/claim',{method:'POST',headers,body:JSON.stringify({key:KEY})})).status,200);
   let page=(await(await fetch(server.origin+'/api/pages/qmc-starter',{headers})).json()).page;page.links=page.links.slice(1);page.name='QMC saved';
   assert.equal((await fetch(server.origin+'/api/pages/'+page.id,{method:'PUT',headers,body:JSON.stringify(page)})).status,200);
   const css=await fetch(server.origin+'/app.css');assert.equal(css.status,200);assert.match(css.headers.get('content-type'),/text\/css/);
   const secret=await fetch(server.origin+'/.data/admin-key');assert.equal(secret.status,404);
-  await server.close();server=await startServer({port:0,dataDir:dir,key:KEY,quiet:true});
+  await server.close();server=await startServer({port:0,dataDir:dir,key:KEY,quiet:true,auth:AUTH,authFetch:provider.fetch});
   page=(await(await fetch(server.origin+'/api/pages/qmc-starter',{headers:{cookie}})).json()).page;assert.equal(page.name,'QMC saved');assert.equal(page.links.length,3);assert(!page.links.some(l=>l.id==='qmc-instagram'));await server.close();
 });
 test('QR exports are self-contained vectors with a white quiet zone and URL normalization',()=>{
@@ -165,7 +168,7 @@ test('upgrading a version 1 database preserves existing pages and removed links'
   const dir=await mkdtemp(join(tmpdir(),'linkboard-migration-'));t.after(()=>rm(dir,{recursive:true,force:true}));const filename=join(dir,'old.sqlite');
   const old=new DatabaseSync(filename);old.exec(await readFile(new URL('../migrations/0001_initial.sql',import.meta.url),'utf8'));old.exec("CREATE TABLE local_migrations(name TEXT PRIMARY KEY); INSERT INTO local_migrations VALUES('0001_initial'); UPDATE pages SET name='Already edited',published=1,slug_locked=1; DELETE FROM links WHERE id='qmc-instagram'");old.close();
   const upgraded=openDatabase(filename);const page=await upgraded.prepare('SELECT * FROM pages WHERE id=?').bind('qmc-starter').first();assert.equal(page.name,'Already edited');assert.equal(page.published,1);assert.equal(page.design,'{}');assert.equal((await upgraded.prepare('SELECT count(*) AS n FROM links').first()).n,3);assert.equal((await upgraded.prepare('SELECT appearance FROM links LIMIT 1').first()).appearance,'{}');upgraded.close();
-  const again=openDatabase(filename);assert.equal((await again.prepare('SELECT count(*) AS n FROM local_migrations').first()).n,2);again.close();
+  const again=openDatabase(filename);assert.equal((await again.prepare('SELECT count(*) AS n FROM local_migrations').first()).n,3);again.close();
 });
 test('image payloads above the old limit are accepted and excessive total page sizes are rejected',async t=>{
   const f=fixture(t);await f.login();let p=(await f.call('/api/pages/qmc-starter')).data.page;

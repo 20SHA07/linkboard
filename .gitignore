@@ -5,3 +5,7 @@ node_modules/
 wrangler.jsonc
 *.sqlite*
 *.log
+
+.env
+.env.*
+!.env.example

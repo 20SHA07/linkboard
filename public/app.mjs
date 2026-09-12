@@ -1,3 +1,4 @@
+import { accountForms } from './account.mjs';
 import { initColorMode } from './color-mode.mjs';
 import { THEMES, SOCIALS, icon, escapeHTML as e, renderPage, safeLink, isHosted, blankPage } from './core.mjs';
 import { normalizeDesign, normalizeLinkStyle } from './design.mjs';
@@ -5,7 +6,7 @@ import { studioHTML, bindStudio, linkStyleHTML, prepareImage } from './studio.mj
 import { createQR } from './qr.mjs';
 
 const $=id=>document.getElementById(id);
-const state={pages:[],page:null,saved:null,dirty:false,saving:false,view:'links',origin:'',demo:false,stats:null,previewTimer:null,previewMode:'page',uploads:0};
+const state={pages:[],page:null,saved:null,dirty:false,saving:false,view:'links',origin:'',demo:false,stats:null,previewTimer:null,previewMode:'page',uploads:0,user:null,maxPages:5};
 let toastTimer,dragId=null,undoAction=null;
 const viewCopy={links:['BUILD YOUR PAGE','A home for your links.','The good stuff, all in one place.'],appearance:['SET THE TONE','A little more you.','Find a look that feels right.'],insights:['FOLLOW THE CONNECTIONS','See what’s clicking.','A simple look at how people find you.'],share:['TAKE IT WITH YOU','One page. Everywhere.','Share a link, print a code, spread the word.'],settings:['THE LITTLE DETAILS','Make yourself at home.','Your page, just the way you want it.']};
 function fillIcons(root=document){root.querySelectorAll('[data-icon]').forEach(el=>{el.innerHTML=icon(el.dataset.icon);});}
@@ -15,11 +16,12 @@ async function api(path,method='GET',body){
   try{response=await fetch(path,{method,credentials:'same-origin',headers:{'content-type':'application/json','x-linkboard':'1'},...(body===undefined?{}:{body:JSON.stringify(body)})});}
   catch{throw new Error('Couldn’t connect. Your unsaved changes are still here. Try again.');}
   const data=await response.json().catch(()=>({error:'The server returned an unreadable response.'}));
-  if(!response.ok){const error=new Error(data.error||'Something went wrong.');error.status=response.status;if(response.status===401&&path!=='/api/login'){showLogin();}throw error;}
+  if(!response.ok){const error=new Error(data.error||'Something went wrong.');error.status=response.status;if(response.status===401&&!path.startsWith('/api/auth/')&&path!=='/api/login'){showLogin();}throw error;}
   return data;
 }
 function toast(message,undo){clearTimeout(toastTimer);$('toast-text').textContent=message;$('toast').hidden=false;undoAction=undo||null;$('toast-action').hidden=!undo;toastTimer=setTimeout(()=>$('toast').hidden=true,undo?9000:6500);}
-function showLogin(){ $('boot').hidden=true;$('app').hidden=true;$('login').hidden=false; }
+const accounts=accountForms({root:$('account-root'),api,onAuthenticated:boot,onSignedOut:()=>{state.page=null;state.pages=[];state.dirty=false;state.user=null;}});
+function showLogin(view=location.pathname==='/signup'?'signup':'login'){ $('boot').hidden=true;$('app').hidden=true;$('login').hidden=false;accounts.show(view); }
 function openModal(title,content){$('modal').classList.remove('wide-modal');$('modal-title').textContent=title;$('modal-body').innerHTML=content;fillIcons($('modal'));if(!$('modal').open)$('modal').showModal();}
 function confirmAction(title,message,label='Continue'){
   return new Promise(resolve=>{
@@ -35,7 +37,7 @@ function refreshToolbar(){
   $('save-page').innerHTML=(state.saving?'Saving…':state.demo?'Save demo':p?.published?'Save changes':'Publish page')+' '+icon(p?.published?'check':'arrow');
   $('save-draft').hidden=!p||p.published||!state.dirty||state.demo;$('save-draft').disabled=state.saving||state.uploads>0;
   $('open-page').disabled=!p?.published||state.demo;$('unpublish-page').disabled=!p?.published||state.demo;
-  if(p){$('page-status').textContent=p.published?'Published':'Draft';$('page-status').className='status-pill '+(p.published?'live':'draft');}
+  if(p){$('page-status').textContent=p.moderation_hidden?'Hidden by site owner':p.published?'Published':'Draft';$('page-status').className='status-pill '+(p.published?'live':'draft');}
 }
 function markDirty(){state.dirty=true;refreshToolbar();renderPreview();}
 function renderPreview(){clearTimeout(state.previewTimer);state.previewTimer=setTimeout(()=>{if(!state.page)return;try{$('preview-frame').srcdoc=renderPage(state.page,{preview:true,mode:state.previewMode});$('preview-error').hidden=true;}catch(error){$('preview-error').textContent=error.message;$('preview-error').hidden=false;}},100);}
@@ -77,7 +79,7 @@ async function savePage(publish=state.page?.published){
   try{
     const {page,storage}=await api('/api/pages/'+state.page.id,'PUT',{...structuredClone(state.page),published:state.demo?false:!!publish});
     state.page=page;state.saved=structuredClone(page);state.dirty=false;state.pages=state.pages.map(p=>p.id===page.id?{...p,...page}:p);
-    toast(state.demo?(storage===false?'Saved for this session only. Browser storage is unavailable or full; download a backup to keep your edits.':'Demo changes saved in this browser.'):page.published?'Your page is published and up to date.':'Draft saved.');renderPageEditor();return true;
+    toast(state.demo?(storage===false?'Saved for this session only. Browser storage is unavailable or full; download a backup to keep your edits.':'Demo changes saved in this browser.'):page.moderation_hidden?'Saved. This page is hidden by the site owner.':page.published?'Your page is published and up to date.':'Draft saved.');renderPageEditor();return true;
   }catch(error){toast(error.message);return false;}
   finally{state.saving=false;document.querySelector('.editor-column').inert=false;refreshToolbar();}
 }
@@ -91,6 +93,7 @@ function switchView(view){
 function moveLink(id,offset){const items=state.page.links,from=items.findIndex(l=>l.id===id),to=from+offset;if(from<0||to<0||to>=items.length)return;items.splice(to,0,items.splice(from,1)[0]);renderLinks();markDirty();}
 async function addPageDialog(copy){
   if(!await canLeave())return;
+  if(!state.demo&&state.pages.length>=state.maxPages){toast('This site allows '+state.maxPages+' pages per account. Edit an existing page or delete one first.');return;}
   const defaultName=copy?copy.name+' copy':'',defaultSlug=copy?copy.slug.slice(0,39)+'-copy':'';
   openModal(copy?'A fresh copy.':'Make a little space.',`<form id="new-page-form"><p>${copy?'Your links and design will be copied into a new private draft.':'Start with a name and an address. You can add links and choose a theme next.'}</p><label for="new-name">Page name</label><input id="new-name" maxlength="60" required value="${e(defaultName)}" placeholder="A community, project, or your name"><label for="new-slug">Page address</label><input id="new-slug" required minlength="2" maxlength="48" pattern="[a-z0-9]+(-[a-z0-9]+)*" value="${e(defaultSlug)}" placeholder="your-name"><p class="field-error" id="modal-error" role="alert"></p><div class="button-row"><button type="button" class="btn secondary" data-close-modal>Cancel</button><button class="btn primary" type="submit">Create page ${icon('arrow')}</button></div></form>`);
   let manuallyChanged=!!copy;$('new-slug').oninput=()=>manuallyChanged=true;$('new-name').oninput=()=>{if(!manuallyChanged)$('new-slug').value=$('new-name').value.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,48);};
@@ -98,6 +101,19 @@ async function addPageDialog(copy){
     event.preventDefault();const btn=event.submitter;btn.disabled=true;
     try{const input={...(copy||blankPage()),name:$('new-name').value,slug:$('new-slug').value,published:false};const {page}=await api('/api/pages','POST',input);$('modal').close();state.dirty=false;await loadWorkspace(page.id);switchView('links');toast('Your new page is ready.');}catch(error){$('modal-error').textContent=error.message;btn.disabled=false;}
   };
+}
+async function accountDialog(){
+  const user=state.user;if(!user)return;
+  openModal('Your account',`<div class="account-summary"><span class="eyebrow">SIGNED IN</span><h3>${e(user.displayName||'Your account')}</h3><p>${e(user.email)}</p><p class="quiet-note">${state.pages.length} of ${state.maxPages} pages used.</p></div><button class="btn secondary" id="change-password">Change password</button>${user.admin?'<button class="btn secondary" id="review-reports">Review reports</button>':''}<details class="account-claim"><summary>Bring in an earlier workspace</summary><p class="quiet-note">Upgrading from Linkboard 1? Your original workspace key moves its unclaimed pages into this account.</p><form id="claim-workspace"><label for="claim-key">Original workspace key</label><input id="claim-key" type="password" autocomplete="off" required minlength="32" maxlength="512"><p class="field-error" id="claim-error" role="alert"></p><button class="btn secondary" type="submit">Claim workspace</button></form></details>`);
+  $('change-password').onclick=async()=>{if(!await canLeave())return;$('modal').close();state.dirty=false;showLogin('password');};
+  $('claim-workspace').onsubmit=async event=>{event.preventDefault();const button=event.submitter;button.disabled=true;try{if(state.dirty)throw Error('Save your page before claiming another workspace.');const result=await api('/api/account/claim','POST',{key:$('claim-key').value});$('claim-key').value='';$('modal').close();await loadWorkspace();toast(result.claimed?result.claimed+' pages added to your account.':'There are no unclaimed pages in this workspace.');}catch(error){$('claim-error').textContent=error.message;}finally{button.disabled=false;}};
+  if(user.admin)$('review-reports').onclick=reviewReports;
+}
+async function reviewReports(){
+  try{const {reports,hidden}=await api('/api/admin/reports');openModal('Community reports',`<p class="quiet-note">Review the page before taking action. Hiding a page also stops its redirect links.</p><div class="report-list">${reports.length?reports.map(r=>`<article class="report-item"><a href="/p/${e(r.slug)}" target="_blank" rel="noopener">${e(r.name)} ↗</a><p>${e(r.reason)}</p><small>${e(r.created_at)}</small><div class="button-row"><button class="btn secondary" data-report="${e(r.id)}" data-action="dismiss">Dismiss</button><button class="btn danger" data-report="${e(r.id)}" data-action="hide">Hide page</button></div></article>`).join(''):'<p>No open reports.</p>'}</div><h3>Hidden pages</h3>${hidden.length?hidden.map(p=>`<div class="report-item">${e(p.name)} <button class="text-button" data-restore="${e(p.id)}">Restore page</button></div>`).join(''):'<p class="quiet-note">No hidden pages.</p>'}`);
+    $('modal-body').querySelectorAll('[data-report]').forEach(button=>button.onclick=async()=>{button.disabled=true;try{await api('/api/admin/reports/'+button.dataset.report,'POST',{action:button.dataset.action});await reviewReports();}catch(error){toast(error.message);button.disabled=false;}});
+    $('modal-body').querySelectorAll('[data-restore]').forEach(button=>button.onclick=async()=>{button.disabled=true;try{await api('/api/admin/pages/'+button.dataset.restore+'/restore','POST',{});await reviewReports();}catch(error){toast(error.message);button.disabled=false;}});
+  }catch(error){toast(error.message);}
 }
 function addLinkDialog(){
   if(!state.page)return;let selected='link';
@@ -205,20 +221,26 @@ function bindEvents(){
   $('duplicate-page').onclick=()=>addPageDialog(structuredClone(state.page)).catch(error=>toast(error.message));
   $('unpublish-page').onclick=async()=>{if(await confirmAction('Take this page offline?','Its address will stay reserved. You can publish it again whenever you’re ready.','Unpublish'))await savePage(false);};
   $('delete-page').onclick=deletePage;
-  $('sign-out').onclick=async()=>{if(!await canLeave())return;try{await api('/api/logout','POST',{});state.dirty=false;showLogin();}catch(error){toast(error.message);}};
+  $('sign-out').onclick=async()=>{if(!await canLeave())return;try{await api('/api/logout','POST',{});state.dirty=false;state.page=null;state.pages=[];state.user=null;showLogin('login');}catch(error){toast(error.message);}};
   $('mobile-preview').textContent='Expand preview ↗';$('mobile-preview').onclick=()=>{try{const content=renderPage(state.page,{preview:true,mode:state.previewMode});openModal('Your page, up close.', '<iframe id="wide-preview" class="wide-preview" title="Expanded page preview" sandbox></iframe>');$('modal').classList.add('wide-modal');$('wide-preview').srcdoc=content;}catch(error){toast(error.message);}};
+  $('account-button').onclick=accountDialog;
+  const sizePreview=()=>{const frame=$('device-frame'),iframe=$('preview-frame');if(frame.classList.contains('desktop-frame')){const scale=frame.clientWidth/1024;iframe.style.width='1024px';iframe.style.height=(frame.clientHeight/scale)+'px';iframe.style.transform='scale('+scale+')';}else{iframe.style.width='100%';iframe.style.height='100%';iframe.style.transform='none';}};
+  new ResizeObserver(sizePreview).observe($('device-frame'));
+  new MutationObserver(sizePreview).observe($('device-frame'),{attributes:true,attributeFilter:['class']});
+  document.querySelectorAll('[data-device]').forEach(button=>button.onclick=()=>{document.querySelectorAll('[data-device]').forEach(b=>b.setAttribute('aria-pressed',b===button));$('device-frame').classList.toggle('desktop-frame',button.dataset.device==='desktop');});
+  document.querySelectorAll('[data-preset]').forEach(button=>button.onclick=()=>{if(!state.page)return;const before=structuredClone(state.page),presets={studio:{theme:'ocean',font:'modern',design:{layout:'split',pageWidth:1080,alignment:'left',headingSize:56,avatarShape:'circle',buttonRadius:18,sectionSpacing:48}},poster:{theme:'rose',font:'geometric',design:{layout:'grid',pageWidth:800,headingSize:60,buttonRadius:4,buttonShadow:'hard',pattern:'dots'}},notebook:{theme:'paper',font:'editorial',design:{layout:'stack',pageWidth:520,alignment:'left',buttonStyle:'outline',buttonRadius:4,buttonShadow:'none',headingFont:'editorial'}}};const preset=presets[button.dataset.preset];Object.assign(state.page,{theme:preset.theme,font:preset.font,design:normalizeDesign({...state.page.design,...preset.design,customColors:false,darkCustomColors:false},THEMES[preset.theme],state.page.shape)});renderAppearance();markDirty();toast('Layout applied. Your links and images are kept.',()=>{state.page=before;renderAppearance();markDirty();toast('Previous design restored.');});});
   $('mobile-signout').onclick=()=>$('sign-out').click();
   $('mobile-signout-top').onclick=()=>$('sign-out').click();
   $('modal-close').onclick=()=>$('modal').close();$('modal').addEventListener('click',event=>{const r=$('modal').getBoundingClientRect();if(event.target===$('modal')&&(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom))$('modal').close();});
   $('toast-close').onclick=()=>$('toast').hidden=true;$('toast-action').onclick=()=>undoAction?.();
-  $('reveal-key').onclick=()=>{const show=$('owner-key').type==='password';$('owner-key').type=show?'text':'password';$('reveal-key').textContent=show?'Hide':'Show';$('reveal-key').setAttribute('aria-label',(show?'Hide':'Show')+' workspace key');};
-  $('login-form').onsubmit=async event=>{event.preventDefault();$('sign-in').disabled=true;$('login-error').textContent='';try{await api('/api/login','POST',{key:$('owner-key').value});$('owner-key').value='';await boot();}catch(error){$('login-error').textContent=error.message;}finally{$('sign-in').disabled=false;}};
   window.addEventListener('beforeunload',event=>{if(state.dirty){event.preventDefault();event.returnValue='';}});
 }
 async function boot(){
-  try{const pending=state.dirty&&state.page?structuredClone(state.page):null;const session=await api('/api/session');state.origin=session.origin;state.demo=!!session.demo;
+  try{const pending=state.dirty&&state.page?structuredClone(state.page):null;const session=await api('/api/session');state.origin=session.origin;state.demo=!!session.demo;state.user=session.user||null;state.maxPages=session.maxPages||5;
+    if(session.needsPasswordReset){showLogin('reset');return;}
     if(!session.authenticated){showLogin();return;}
-    $('boot').hidden=true;$('login').hidden=true;$('app').hidden=false;$('demo-banner').hidden=!state.demo;$('sign-out').hidden=state.demo;$('mobile-signout').hidden=state.demo;$('mobile-signout-top').hidden=state.demo;
+    if(!state.demo&&['/login','/signup'].includes(location.pathname))history.replaceState(null,'','/app'+location.hash);
+    $('boot').hidden=true;$('login').hidden=true;$('app').hidden=false;$('demo-banner').hidden=!state.demo;$('account-button').hidden=state.demo;$('account-button').textContent=state.user?.displayName||'Account';$('sign-out').hidden=state.demo;$('mobile-signout').hidden=state.demo;$('mobile-signout-top').hidden=state.demo;
     if(state.demo&&session.storage===false)$('demo-banner').querySelector('span').textContent='Temporary demo. Browser storage is unavailable; export a backup to keep your edits.';
     state.view=location.hash.slice(1)||'links';await loadWorkspace(state.page?.id);
     if(pending&&state.page?.id===pending.id){state.page=pending;state.dirty=true;renderPageEditor();toast('Your unsaved changes are still here.');}

@@ -1,8 +1,10 @@
 # Put your QMC page on GitHub Pages
 
-GitHub Pages can serve the exported QMC website for free from a public repository. It serves static HTML, CSS, and JavaScript. The exported page includes its images, light/dark modes, active social links, and QR sharing menu in one file.
+For the full signup/login platform, use the Cloudflare + Supabase setup in [README.md](README.md). This guide is only for a public static page.
 
-The private server editor, owner authentication, database, and view/click counts need the Node or Cloudflare version. Use the downloaded editor to make changes, then upload each new website export to GitHub.
+GitHub Pages can serve the exported QMC website for free from a public repository. It serves static HTML, CSS, and JavaScript. The exported page includes its images, light/dark modes, active social links, and on-page QR code and sharing menu in one file.
+
+The private server editor, user accounts, database, and view/click counts need the Node or Cloudflare version. Use the downloaded editor to make changes, then upload each new website export to GitHub.
 
 ## 1. Finish your page
 
@@ -35,11 +37,11 @@ The export works under a repository path because it has no root-relative script 
 
 ## 4. Get the QR code
 
-Open the published page at its final HTTPS address, select its share button, and download the QR code. Scan it with your phone before printing.
+Open the published page at its final HTTPS address, download the QR from the page itself or its share button. Scan it with your phone before printing.
 
 The QR code uses the address you opened, including the GitHub repository path. Keep the same repository and page address when you update the site so existing QR codes keep working.
 
-If you hide the share button in Appearance, enable it and export again before using the built-in QR download.
+Enable either the on-page QR code or the share button in Appearance, then export. They are independent controls.
 
 ## 5. Make future edits
 

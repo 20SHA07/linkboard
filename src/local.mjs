@@ -7,7 +7,7 @@ import worker from './worker.mjs';
 import { openDatabase } from './db.mjs';
 
 const root=fileURLToPath(new URL('../',import.meta.url));
-export async function startServer({port=Number(process.env.PORT||3000),host=process.env.HOST||'127.0.0.1',dataDir=resolve(root,'.data'),key=process.env.ADMIN_KEY,quiet=false}={}){
+export async function startServer({port=Number(process.env.PORT||3000),host=process.env.HOST||'127.0.0.1',dataDir=resolve(root,'.data'),key=process.env.ADMIN_KEY,quiet=false,auth={},authFetch}={}){
   await mkdir(dataDir,{recursive:true,mode:0o700});
   if(!key){
     try{key=(await readFile(resolve(dataDir,'admin-key'),'utf8')).trim();}
@@ -20,7 +20,10 @@ export async function startServer({port=Number(process.env.PORT||3000),host=proc
     if(!/^\/[a-zA-Z0-9-]+\.(html|css|mjs|svg)$/.test(pathname))return new Response('Not found',{status:404});
     try{const data=await readFile(resolve(root,'public',pathname.slice(1)));const type={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.svg':'image/svg+xml'}[extname(pathname)];return new Response(data,{headers:{'content-type':type,'cache-control':'no-cache'}});}catch{return new Response('Not found',{status:404});}
   }};
-  const env={DB,ASSETS,ADMIN_KEY:key,PUBLIC_ORIGIN:process.env.PUBLIC_ORIGIN};
+  let sessionSecret=auth.SESSION_SECRET||process.env.SESSION_SECRET;
+  if(!sessionSecret){try{sessionSecret=(await readFile(resolve(dataDir,'session-secret'),'utf8')).trim();}catch(error){if(error.code!=='ENOENT')throw error;sessionSecret=randomBytes(32).toString('hex');await writeFile(resolve(dataDir,'session-secret'),sessionSecret+'\n',{mode:0o600,flag:'wx'});}}
+  const settings=Object.fromEntries(['SUPABASE_URL','SUPABASE_PUBLISHABLE_KEY','OWNER_EMAIL','SUPPORT_EMAIL','REGISTRATION_OPEN','MAX_PAGES_PER_USER','TURNSTILE_SITE_KEY','PUBLIC_ORIGIN'].map(key=>[key,process.env[key]]));
+  const env={...settings,...auth,SESSION_SECRET:sessionSecret,DB,ASSETS,ADMIN_KEY:key,...(authFetch?{AUTH_FETCH:authFetch}:{})};
   const server=createServer(async(req,res)=>{
     try{
       const chunks=[];let size=0;
@@ -38,7 +41,7 @@ export async function startServer({port=Number(process.env.PORT||3000),host=proc
   server.requestTimeout=15000;server.headersTimeout=10000;
   await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(port,host,resolve);});
   const address=server.address(),origin=`http://${host==='0.0.0.0'?'localhost':host}:${address.port}`;
-  if(!quiet){console.log(`Linkboard is running at ${origin}`);console.log('Run npm run owner-key in another terminal to view your private sign-in key.');console.log('Your pages are stored in .data/linkboard.sqlite.');}
+  if(!quiet){console.log(`Linkboard is running at ${origin}`);console.log('Open /signup to create your account. Account configuration lives in .env.');console.log('Your pages are stored in .data/linkboard.sqlite.');}
   return {origin,env,close:()=>new Promise(resolve=>server.close(()=>{DB.close();resolve();}))};
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url))startServer().catch(error=>{console.error(error.message);process.exit(1);});

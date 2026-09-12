@@ -3,6 +3,12 @@ import { createQR } from './qr.mjs';
 import { isHosted } from './core.mjs';
 const get=id=>document.getElementById(id),dialog=get('share-dialog');
 initColorMode({defaultMode:document.documentElement.dataset.mode,controls:document.querySelectorAll('#page-mode'),storageKey:'linkboard-visitor-mode:'+location.pathname,persist:document.documentElement.dataset.visitorMode==='true',onApply(){const meta=document.querySelector('meta[name="theme-color"]');if(meta)meta.setAttribute('content',getComputedStyle(document.documentElement).getPropertyValue('--bg').trim());}});
+const publicURL=document.body.dataset.publicUrl||location.origin+location.pathname;
+function downloadQR(svg){const objectURL=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'}));const a=document.createElement('a');a.href=objectURL;a.download='page-qr.svg';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(objectURL),3000);}
+if(get('inline-qr')){
+  if(isHosted(publicURL)){try{const inlineSVG=createQR(publicURL);get('inline-qr').innerHTML=inlineSVG;get('inline-qr-download').hidden=false;get('inline-qr-download').onclick=()=>downloadQR(inlineSVG);}catch{get('inline-qr').textContent='Share this page using its address.';}}
+  else get('inline-qr').textContent='Open the hosted page to see its scannable QR code.';
+}
 if(dialog&&get('share-open')){
   const url=document.body.dataset.publicUrl||location.origin+location.pathname;
   let svg='';
@@ -10,7 +16,7 @@ if(dialog&&get('share-open')){
     get('share-status').textContent='';get('share-url').value=url;
     const ready=isHosted(url);get('share-download').hidden=!ready;get('share-qr').hidden=!ready;
     get('share-native').hidden=!navigator.share;
-    get('share-description').textContent=ready?'One scan. All our socials.':'This page is running locally. Open its hosted address to get a QR code others can use.';
+    get('share-description').textContent=ready?'One scan. All these links.':'This page is running locally. Open its hosted address to get a QR code others can use.';
     if(ready){try{svg=createQR(url);get('share-qr').innerHTML=svg;}catch{get('share-download').hidden=true;get('share-qr').hidden=true;get('share-status').textContent='The QR code could not be created. You can still copy the link.';}}
     dialog.showModal();
   });

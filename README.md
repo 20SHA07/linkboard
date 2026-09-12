@@ -1,150 +1,185 @@
 # Linkboard
 
-A complete private link-in-bio workspace. Create pages, customize their design, publish, and download a QR code. A QMC draft is included as your first page.
+A free, self-hostable link page platform. Anyone can create an account, verify their email, and build pages in a desktop design studio. Published pages have their own addresses, light/dark modes, and optional on-page QR codes.
 
-The application has no paid SDKs, external fonts, analytics services, or runtime npm dependencies. You control the code and the data. It has one private owner workspace and multiple public pages. Separate accounts, public registration, and team permissions are not included.
+Version 2 adds individual accounts, public registration, password recovery, page ownership, a new public home page, desktop layouts, and moderation. The code is MIT-licensed. There is no paid feature tier in this app. Hosting providers have usage limits; unlimited free hosting forever is not a promise this project can make.
 
-## Run it locally
+## What you can use
 
-Install **Node.js 24 or newer**, unzip this project, and open a terminal in the `linkboard` folder:
+- Email/password signup, email-code verification, login, sign-out, and password recovery.
+- Separate private workspaces. An account cannot read, edit, export, or delete another account’s pages.
+- Multiple pages per account, draft saves, publishing, duplication, backups, import, and standalone website export.
+- A desktop editor with a live 1024px desktop preview, phone preview, and expanded preview.
+- Studio, Poster, and Notebook starting layouts; six colour themes; detailed visual controls and custom CSS.
+- Light, Dark, and System modes for both the editor and public pages, with separate light/dark palettes.
+- QR displayed on the page, optional share dialog, SVG download, and PNG export from the editor. QR generation runs in the visitor’s browser without a QR service.
+- Up to 100 links per page with icons, descriptions, badges, thumbnails, individual styling, and drag or keyboard-friendly ordering.
+- Optional daily view/click totals, a 30-day display, and CSV export. These are counts, not unique visitors. Do Not Track and Global Privacy Control requests are excluded.
+- Public page reports, owner-only review, and reversible page hiding.
+- A QMC starter draft with empty social URLs. No handles or logos are invented.
+
+This is a working core alternative, not a complete copy of every Linktree product. Shared team editing, Google/social login, MFA screens, shops/payments, email marketing, per-user custom-domain provisioning, and automated account deletion are not implemented. Account deletion requests go to the operator. A page has one owning account. These features can be added to the source without a Linkboard licence fee.
+
+## Where each part runs
+
+| Service | Job |
+| --- | --- |
+| GitHub | Source repository and version history |
+| Cloudflare Workers | Website, private API, public pages, and link redirects |
+| Cloudflare D1 | Page content, uploaded images, ownership, encrypted sessions, reports, and counters |
+| Supabase Auth | Account identity, passwords, email verification, recovery, and token refresh |
+| An SMTP provider connected to Supabase | Delivers account verification and recovery emails |
+| Cloudflare Turnstile, optional | CAPTCHA on account forms, verified by Supabase |
+
+You do not host the website on Supabase in this setup. You use its Auth service only. There are no application tables or migrations to put in Supabase, and no Supabase Storage, R2, Firebase, Vercel, or paid SDK is needed. D1 is accessed only by the Worker, never directly from the browser. The API enforces account ownership on every private page operation.
+
+GitHub Pages is suitable for an exported public QMC page. The full service needs the Worker API and database. GitHub also discourages Pages use for sensitive transactions such as sending passwords and restricts commercial SaaS hosting. Keep the account service on Cloudflare. See [GitHub Pages limits](https://docs.github.com/en/pages/getting-started-with-github-pages/github-pages-limits) and [GITHUB_PAGES.md](GITHUB_PAGES.md).
+
+## Set up Supabase Auth
+
+1. Create a Supabase project on its Free plan. Use a separate project for Linkboard if possible.
+2. In Authentication, enable email/password sign-in, allow new signups, and keep **Confirm email** enabled. Set the minimum password length to 12, matching the app. Additional provider password rules may also apply.
+3. In the project’s API settings or Connect dialog, copy the **Project URL** and **publishable key**. A legacy `anon` key also works. Never use `service_role` or an `sb_secret_` key. You do not need to supply your Supabase database password to Linkboard.
+4. In **Authentication → Email Templates → Confirm signup**, paste [auth-emails/confirm-signup.html](auth-emails/confirm-signup.html). Use a subject such as “Your Linkboard verification code”.
+5. In **Reset password**, paste [auth-emails/reset-password.html](auth-emails/reset-password.html). Use a subject such as “Your Linkboard recovery code”.
+6. Both templates must contain `{{ .Token }}`. Linkboard uses numeric codes entered in the browser, not Supabase’s default confirmation-link/URL-fragment flow. Using the unmodified link templates will not complete these account forms.
+7. Configure **custom SMTP** with the sender, host, port, username, and password supplied by your email provider. Complete that provider’s sender/domain verification. SMTP credentials belong in Supabase’s dashboard, not the Linkboard repository.
+8. Set the Auth **Site URL** to `http://127.0.0.1:3000` while testing, then your actual HTTPS Worker address after deployment. This implementation does not need broad wildcard redirect URLs.
+
+Supabase’s default email sender is intended for testing, currently only sends to project-team addresses, and is limited to two messages per hour. It cannot support public registration for arbitrary users. Custom SMTP is required for launch. Email providers may have free allowances, but volume, sender verification, and domain requirements vary. A provider may require a domain you own, which can prevent an entirely $0 setup if you do not already have one. Sources: [Email templates](https://supabase.com/docs/guides/auth/auth-email-templates), [Signup OTP verification](https://supabase.com/docs/reference/javascript/auth-verifyotp), [Custom SMTP](https://supabase.com/docs/guides/auth/auth-smtp).
+
+For bot protection, create a Turnstile widget with your actual hostnames, put its **secret key in Supabase Auth’s CAPTCHA settings**, and its **site key in Linkboard’s configuration**. These must be configured together. The site key is public; the secret stays in Supabase. See [Supabase CAPTCHA](https://supabase.com/docs/guides/auth/auth-captcha).
+
+## Configure and test locally
+
+Install **Node.js 24 or newer**. Clone this repository or download and unzip it, then open a terminal in the project folder:
 
 ```bash
+git clone https://github.com/20SHA07/linkboard.git
+cd linkboard
+npm run configure
 npm start
 ```
 
-Open `http://127.0.0.1:3000`. In another terminal, run:
+The configure command asks for your Supabase project URL, publishable key, the email you will use as site owner, a support email, and an optional Turnstile site key. It creates a private `.env` and generates a random session-encryption secret. This file is ignored by Git. Do not paste secrets into chat or commit them.
 
-```bash
-npm run owner-key
-```
+Open `http://127.0.0.1:3000`. Select **Create an account**, use the owner email, enter the emailed code, and create a page. Configure SMTP before testing a non-team address. If CAPTCHA is enabled, your widget must accept your local hostname too.
 
-Paste that key into the sign-in form. It is generated on first start, kept in `.data/admin-key`, and never included in the public site. Keep it private: anyone with it can edit every page in this workspace. Sessions last seven days, and signing out revokes the current session.
+Local content is in `.data/linkboard.sqlite`; local and hosted databases are separate. Keep `.data` and `.env` between runs. Stop the server before copying `.data` for a local backup. The default server listens only on your computer. Local signup still uses your configured Supabase project, so local and hosted identity are shared if they use the same project.
 
-The local database is `.data/linkboard.sqlite`. Keep the `.data` folder between runs. Stop the server before copying the folder for a full local backup. The default server listens only on your computer; it is not a public hosting service.
+To try the editor without accounts or hosting, open the supplied `linkboard-demo.html`, or generate it with `npm run demo`. This is explicitly an offline demo. Edits stay in this browser when storage is available. It does not provide public signup, publish to the internet, or create real analytics. Use **Download backup** to keep your editable work.
 
-## Finish the QMC page
+## Deploy on Cloudflare
 
-1. Select **QMC** in the page picker.
-2. Click its avatar to upload the real QMC logo. Set the name and description.
-3. Paste the real social URLs into the prepared link cards, then switch on the links you want visible. Add or remove platforms as needed.
-4. Open **Appearance** for themes, colours, backgrounds, typography, spacing, buttons, and custom CSS. Use **Link details → Style this link** for individual link designs. Linkboard credit is optional and off by default.
-5. Use **Save draft** while working. When at least one valid link is enabled, select **Publish page**.
-6. On the hosted app, open **QR & sharing** and download an SVG for print or a PNG for other uses. Scan the code on your phone before printing copies.
-
-QMC’s address will be `/p/qmc` on your chosen host. Published addresses stay fixed, including when a page is unpublished, to protect shared links and printed QR codes. Updating a social destination does not change the QR code. Deleting a page, changing its domain, or shutting down its hosting makes its old QR code stop working.
-
-The supplied QMC draft contains no invented handles. Empty or disabled links never appear on the public page. Public pages work without JavaScript; JavaScript adds the share dialog and QR download.
-
-## Host it on Cloudflare’s free tier
-
-You need your own Cloudflare account. Keep the account on **Workers Free**. From the project folder, run:
+Create a Cloudflare account and keep it on **Workers Free**. From the configured project folder:
 
 ```bash
 npm run deploy
 ```
 
-The helper signs you into Cloudflare, asks for a Worker name, creates a D1 database, applies the schema, and deploys the app with the owner key stored as a Worker secret. It uses the current Wrangler 4 CLI and requires internet access. `wrangler.jsonc` is created for your deployment. Reuse this file on later deployments to keep the same Worker and database.
+The helper uses Wrangler 4, signs you into Cloudflare, asks for a Worker name, creates a D1 database if needed, applies migrations, and deploys the site and API. The Supabase publishable key and session secret are stored as Worker secrets. Public configuration is stored as Worker variables. It does not select or enable a paid plan.
 
-After deployment, open the HTTPS address printed in the terminal. Run `npm run owner-key` and paste the key into the hosted editor. The provided `workers.dev` address avoids buying a domain. Keep **Workers Free** selected and leave paid products disabled. The helper does not upgrade your plan.
+Reuse the generated `wrangler.jsonc`, `.env`, and `.data/admin-key` on future deployments. The helper preserves the existing database ID and upgrades the asset routes. Do not create a new database for each update. If you deploy from another computer, copy these private configuration files securely.
 
-Current free limits, checked September 12, 2026:
+Wrangler prints your real HTTPS `workers.dev` address. The address is only live after a successful deployment. Update Supabase’s Site URL and, if used, Turnstile hostnames to that address. Open `/signup` or `/login` on that host. GitHub pushes by themselves do not run this helper or deploy the site.
 
-| Resource | Free allowance |
-| --- | --- |
-| Dynamic Worker requests | 100,000 per day across the account |
-| Worker CPU | 10 ms per invocation |
-| D1 rows read | 5 million per day |
-| D1 rows written | 100,000 per day |
-| D1 database size | 500 MB per database; 5 GB across the account |
-| Static asset requests | Free and unlimited |
+A host-provided address avoids buying a website domain. If you add a custom domain later, configure it in Cloudflare and set `PUBLIC_ORIGIN` in `.env` to its actual HTTPS origin, then redeploy. Keep the public domain stable once QR codes are distributed.
 
-A page visit, a link redirect, and an editor API call each use dynamic requests. These are not allowances for 100,000 complete visitor sessions. D1 daily read/write exhaustion returns errors until the limits reset; it does not provide unlimited service. Sources: [Workers pricing](https://developers.cloudflare.com/workers/platform/pricing/), [D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/), and [D1 limits](https://developers.cloudflare.com/d1/platform/limits/).
+Manual fallback:
 
-**Free forever:** this copy of Linkboard is MIT-licensed with no subscription or feature fees. Third-party hosting terms, service availability, and your usage can change, so nobody can guarantee permanent $0 hosting. Keep the source and page backups so you can move the app. A bought custom domain normally has a renewal cost; use a host-provided address for a $0 setup.
+1. Copy `wrangler.example.jsonc` to `wrangler.jsonc`, change the Worker name, and put your actual public configuration in `vars`.
+2. Run `npx wrangler@4 login` and `npx wrangler@4 d1 create linkboard-db`. Put the returned database ID into the existing `DB` binding.
+3. Run `npx wrangler@4 d1 migrations apply DB --remote`.
+4. Run `npx wrangler@4 secret put SESSION_SECRET` and `npx wrangler@4 secret put SUPABASE_PUBLISHABLE_KEY`, entering the corresponding `.env` values at the prompts. Wrangler can create the Worker when setting its first secret.
+5. For an upgrade or the QMC seed claim, set `ADMIN_KEY` using `npx wrangler@4 secret put ADMIN_KEY`. Reuse the original value, never an example key.
+6. Run `npx wrangler@4 deploy`.
 
-Configure QMC in the **hosted** workspace to create its shareable URL. Local and hosted databases are separate. To move a page you already edited locally, download its backup in Settings and import it on the hosted workspace. For the exact `qmc` address, first delete the untouched hosted QMC draft, then import the backup using `qmc`.
+References: [Worker secrets](https://developers.cloudflare.com/workers/configuration/secrets/), [D1 commands](https://developers.cloudflare.com/workers/wrangler/commands/d1/), [static asset routing](https://developers.cloudflare.com/workers/static-assets/routing/advanced/html-handling/).
 
-If automated setup stops, use the manual commands below. Copy `wrangler.example.jsonc` to `wrangler.jsonc`, change the Worker name, and replace its database ID with the ID printed by `d1 create`.
+## Finish QMC or upgrade from version 1
 
-```bash
-npx wrangler@4 login
-npx wrangler@4 d1 create linkboard-db
-npx wrangler@4 d1 migrations apply DB --remote
-npx wrangler@4 deploy
-npx wrangler@4 secret put ADMIN_KEY
-```
+Migration `0003_accounts.sql` preserves earlier pages, links, designs, and public addresses. It signs out old workspace-key sessions. Those pages remain unclaimed until a verified account proves possession of the original workspace key. New signups cannot access them automatically.
 
-Paste a random owner key of at least 32 characters at the secret prompt. Before that secret is configured, the workspace rejects sign-in. Reference: [D1 commands](https://developers.cloudflare.com/workers/wrangler/commands/d1/) and [Worker secrets](https://developers.cloudflare.com/workers/configuration/secrets/).
+1. Sign in using your verified owner email.
+2. Run `npm run owner-key` on the computer that has the original `.data/admin-key`, or use the `ADMIN_KEY` you originally configured.
+3. In the app, select **Account → Bring in an earlier workspace**, then enter that original key. All still-unclaimed pages move into this account once. The key does not grant access to pages already owned by another account.
+4. Select QMC, upload its real logo, add its real social URLs, and enable the links you want visible.
+5. Customize Appearance, then **Publish page**. The address becomes `/p/qmc` on your host.
+6. In **Appearance → A QR code on your page**, choose visibility, position, size, and caption. In **QR & sharing**, download an SVG or PNG. Scan the hosted code before printing.
 
-If you later add a custom domain, set the Worker variable `PUBLIC_ORIGIN` to its HTTPS origin, without a path. Keep using that domain for printed QR codes. Do not set it to a guessed or unconfigured address.
+The first publication locks the address even if you later unpublish. Editing links does not change the QR code. Deleting a page frees its address, so unpublish if you want to retain it. Moving domains or shutting down hosting can break old QR codes.
 
-## Host the exported QMC website on GitHub Pages
+If you lose an old key, do not claim with a new invented key. A database administrator can assign unclaimed pages to a verified account after checking ownership. Page backups can be imported into a new account with a new address. They never overwrite another user’s page.
 
-GitHub Pages supports the single-file website export, including Light, Dark, and System modes. Use a public repository for GitHub Free. Build your page in the downloaded editor, select **Settings → Download website**, rename the result to `index.html`, upload it to the repository root, and choose **Settings → Pages → Deploy from a branch → main → / (root)**.
-
-The full step-by-step guide is [GITHUB_PAGES.md](GITHUB_PAGES.md). Future edits require exporting again and replacing `index.html` in the same repository. GitHub Pages serves the public website; the app’s private owner authentication and database still require the Node or Cloudflare version. GitHub’s [Pages documentation](https://docs.github.com/en/pages/getting-started-with-github-pages/creating-a-github-pages-site) describes its static hosting and free public repository support.
-
-## A simpler free route on Cloudflare Pages
-
-If you are happy to edit in the downloaded browser editor and upload each finished version, you can host the exported QMC page as a static website. This route has no application server or database.
-
-1. Open `linkboard-demo.html` in your browser, enter the real QMC links, and customize its appearance.
-2. In **Settings**, download a **page backup** to keep editable data. Then select **Download website**.
-3. Rename the exported `qmc.html` to `index.html` and place it in a folder called `qmc-site`.
-4. In Cloudflare, open **Workers & Pages → Create application → Get started → Drag and drop your files**. Give the Pages project a name, upload the `qmc-site` folder, and deploy it.
-5. Open the production `pages.dev` address. If the share button is enabled, use it to download the QR code for this address. Scan it before printing.
-6. To change a link or design later, edit the browser editor, export again, and create a new **production deployment in the same Pages project**. Keeping the address unchanged keeps printed QR codes useful.
-
-Cloudflare Pages currently serves static requests free and without a request quota. Build, file, and other platform limits still apply. The exported site is a single HTML file containing its styles, uploaded images, active links, and optional QR share menu. It does not include the private editor, online saving, or analytics. Sources: [Pages pricing](https://developers.cloudflare.com/pages/functions/pricing/) and [Direct Upload instructions](https://developers.cloudflare.com/pages/get-started/direct-upload/).
-
-The demo stores edits in this browser when storage is available. Moving the demo file, clearing browser data, or reaching storage limits can remove that convenience. The JSON page backup is the portable editable copy. A website export does not automatically receive future changes from the editor.
-
-## Design controls
-
-Start with one of six palettes, then change any of these without a subscription:
+## Customize the page
 
 | Area | Controls |
 | --- | --- |
-| Display mode | Light, Dark, or System; optional visitor selector; separate editor preference; light/dark preview |
-| Colours | Separate light and dark palettes: background, main and secondary text, buttons, accents, borders, per-link colours |
-| Background | Solid, two-colour gradient, angle, uploaded image, overlay, dots or grid |
-| Identity | Name, bio, profile image, cover image, image sizes, shape, border, alignment |
-| Typography | Five device font stacks, separate heading font, sizes, heading weight and letter spacing |
-| Layout | Single column or grid, maximum width, side margins, section spacing, link spacing |
-| Buttons | Filled, outline or glass; corner radius, border width, padding, shadows and motion |
-| Individual links | Icon, description, visibility, ordering, colours, featured border, badge and thumbnail |
-| Finishing touches | Top label, share button, icons, arrows, descriptions, footer, note and optional credit |
-| Advanced | Custom CSS for the public page, mobile preview, expanded preview, reset controls |
+| Layout | Stack, grid, or split profile/links; up to 1200px width; margins and spacing |
+| Display | Light, Dark, or System; visitor selector; independent editor and preview modes |
+| Colour | Separate light/dark palettes, per-link colours, gradient, overlay, dots/grid texture |
+| Identity | Name, bio, profile/cover/background images, alignment, avatar size and shape |
+| Typography | Five device font stacks, separate heading font, sizes, weight, and letter spacing |
+| Links | Icons, descriptions, visibility, order, colours, badge, thumbnail, featured border |
+| Buttons | Filled, outline, glass, borders, radii, padding, shadows, hover and entrance motion |
+| Sharing | QR visibility, position, size, caption, share button, SVG/PNG exports |
+| Details | Labels, note, footer, icons/arrows, descriptions, optional Linkboard credit |
+| Advanced | Custom CSS, JSON backups, duplication, and standalone HTML export |
 
-Images are resized in the browser and stored with the page. Upload PNG, JPEG, or WebP files up to 12 MB; the saved page and its images must fit within 1.8 MB. The editor compresses uploads automatically. CSS is limited to 18,000 characters. HTML, JavaScript, stylesheet imports, and external image/font resources are not supported in custom CSS. This gives broad visual control without allowing CSS to affect the private editor. These limits apply to the included editor; the MIT source can be modified if you need different functionality.
+Images are compressed in the browser. Upload PNG, JPEG, or WebP up to 12 MB; each saved page must fit within 1.8 MB including its images. CSS is limited to 18,000 characters. Custom HTML, JavaScript, stylesheet imports, external image resources, and web-font services are not supported. Device fonts vary by computer. Per-link colours remain as selected in both modes, so check their contrast. Custom CSS is powerful enough to hide or overlap your own page controls; use Reset if you get stuck.
 
-The editor mode selector changes only your workspace. **Appearance → Light, dark, or both** controls the default public page mode; visitors can choose their own if you enable the selector. Choices are remembered in each browser when storage is available. System mode follows device appearance changes. Mode settings travel with page backups and HTML exports, and custom CSS can target `:root[data-mode="dark"]` or the `prefers-color-scheme` media query. Explicit per-link colours remain as chosen in both modes.
+QR codes keep black modules and a white quiet zone for scanning. You can style the surrounding card with CSS. Turning off sharing does not turn off the separate on-page QR setting. Public social links work without JavaScript; interactive QR and mode controls need it. Exported pages compute their QR from the final host and repository path.
 
-## What’s included
+## Free-tier capacity
 
-- Multiple pages, an owner sign-in, and persistent SQLite/D1 storage.
-- The full design studio above, including per-link styling and custom CSS.
-- Up to 100 links per page, optional descriptions, social icons, visibility switches, drag ordering, and accessible up/down controls.
-- Draft saves, publishing, unpublishing, and protected page deletion.
-- Public HTML pages, native sharing, clipboard fallback, and locally generated SVG/PNG QR exports.
-- Optional anonymous daily view/click counts, a 30-day view, and CSV export. Counts are not unique visitors and may include automated traffic. Do Not Track and Global Privacy Control requests are excluded.
-- Standalone website export, page backup/import, and duplication. A page backup contains content and design; it does not include analytics or sessions.
-- Concurrent-edit protection, input validation, parameterized SQL, CSRF checks, rate-limited sign-in, secure production cookies, and security response headers.
+Checked September 12, 2026:
 
-To rotate the hosted owner key, run `npx wrangler@4 secret put ADMIN_KEY`. Old sessions stop working immediately. For local use, replace `.data/admin-key` while the server is stopped, then restart. There is no email-based password recovery or public signup.
+| Resource | Free allowance |
+| --- | --- |
+| Worker dynamic requests | 100,000 per day across your account |
+| Worker CPU | 10 ms per invocation |
+| Static asset requests | Free and unlimited |
+| D1 reads / writes | 5 million rows read and 100,000 rows written per day |
+| D1 storage | 500 MB per database; 5 GB across the account |
+| Supabase Auth | 50,000 monthly active users |
+| Supabase project availability | Free projects pause after one week of inactivity |
+| Email delivery | Your chosen SMTP provider’s allowance |
 
-## Verification
+Sources: [Workers pricing](https://developers.cloudflare.com/workers/platform/pricing/), [D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/), [D1 limits](https://developers.cloudflare.com/d1/platform/limits/), [Supabase pricing](https://supabase.com/pricing).
+
+These limits are independent. This app uses one D1 database, so its free storage ceiling is 500 MB, not the 5 GB account total. Images use that space. A visit, a redirect click, and an API call each use resources; 100,000 requests does not mean 100,000 full visitor sessions. The Supabase allowance does not prove this installation can serve 50,000 creators. Large pages and exports also need checking against the Worker CPU budget on the deployed host.
+
+D1 rejects queries when daily quotas are exhausted. A service can stop working before it incurs a charge. Keep free plans selected, monitor dashboards, and decide whether to close registration, reduce usage, move hosts, or fund upgrades as the service grows. No implementation can guarantee another company’s pricing or uptime forever.
+
+## Site ownership and maintenance
+
+`OWNER_EMAIL` must match a **provider-verified** email. User-editable metadata cannot grant administrator privileges. The owner can review reports in **Account → Review reports** and restore hidden pages. Moderation hides public pages and redirects while preserving the creator’s private editor. A disabled account cannot edit or publish; its public pages are unavailable.
+
+`MAX_PAGES_PER_USER` defaults to 5 and can be set from 1 to 50 in `.env`. Change it and redeploy. Legacy claims preserve all previous pages even if they exceed the new limit; creating more pages still respects the limit. Set `REGISTRATION_OPEN=false` and redeploy to pause new memberships while existing members can sign in. Also close signups in Supabase if you want to stop direct project registrations. The verified site owner can still establish an app session when registration is closed, provided the Supabase account already exists.
+
+For a verified account deletion request, first confirm the account ID against its Supabase Auth identity. In D1, delete that account’s pages, then its `accounts` row (sessions cascade). Delete the corresponding Supabase Auth user from its dashboard too. The account email and pages are removed from the active app database; provider logs and recovery backups have their own retention. Don’t delete an identity using a guessed email/ID. Put a working `SUPPORT_EMAIL` in your configuration and review the public privacy/community pages for your site.
+
+Keep database exports and the session secret private. A full D1 backup contains account data and encrypted provider credentials. Use D1’s dashboard backup/export tools; per-page JSON exports contain only page information. Rotating `SESSION_SECRET` invalidates all app sessions. Changing `ADMIN_KEY` affects legacy claims only. Never put production secrets in `public/`, GitHub, page CSS, or a website export.
+
+Before inviting everyone, use the real host to register two separate accounts, verify SMTP delivery, complete recovery, publish a page, check its QR on a phone, and inspect desktop/mobile plus light/dark layouts. Turnstile, if configured, must pass with the actual domain. Review free-plan metrics after representative uploads and exports.
+
+## Verification and project layout
 
 ```bash
 npm test
 ```
 
-The 30 automated checks cover authentication, authorization, CSRF checks, publishing, unsafe input and CSS, concurrent updates, analytics, design and image persistence, backup/import, portable HTML export on GitHub project paths, mode persistence and device changes, database upgrades, deletion, link batches, and actual persistence across local server restarts. The QR encoder was also compared against an independently installed QR encoder during development.
+The automated suite covers signup/verification contracts, ownership across every private page endpoint, session encryption/revocation/refresh, recovery restrictions, registration closure, rate limits, CSRF, reporting, page quotas under concurrency, publishing, imports, unsafe input/CSS, design persistence, QR host paths, colour modes, schema upgrades, and an actual local server restart.
 
-Browser rendering and interaction checks, and an actual Cloudflare deployment, could not be run in the build environment. Check the hosted page on a phone before public use. The standalone `linkboard-demo.html` is an offline editor using browser storage. It exports a deployable website, but does not publish that file to the internet itself.
+Supabase responses are mocked in integration tests; real SMTP delivery, provider configuration, CAPTCHA, Cloudflare deployment, production CPU limits, and visual browser interaction were **not** verified in the build environment. The browser installation was unavailable. These are deployment acceptance checks, not claims that the hosted service is already live.
 
-## Project files
+- `src/worker.mjs`: production routes and page ownership.
+- `src/auth.mjs`: Supabase Auth REST integration and encrypted server sessions.
+- `src/local.mjs` / `src/db.mjs`: local Node server and D1-compatible SQLite adapter.
+- `public/`: landing page, account forms, studio, public renderer, QR and sharing.
+- `migrations/`: incremental D1/SQLite schema updates.
+- `auth-emails/`: code-based templates to paste into Supabase.
+- `scripts/`: local configuration, deployment, and offline-demo build.
+- `test/`: integration and export checks, with a test-only Auth provider double.
 
-`src/worker.mjs` contains the production API and public-page routes. `src/local.mjs` runs the same app locally, and `src/db.mjs` adapts SQLite to the D1 interface. `public/` contains the editor and shared page renderer. `migrations/` defines and upgrades the database, and `test/` contains integration checks. To rebuild the standalone editor, run `npm run demo`. Version 1.2 adds Light/Dark/System modes using the existing design field, so it needs no new database migration. Version 1.1 adds design storage through `0002_design_studio.sql`; local startup and the deployment helper apply pending migrations without reseeding edited pages.
-
-Application code is provided under the MIT license. Preserve the third-party QR encoder notices when redistributing the project.
+No runtime npm dependencies or externally loaded fonts are required. Preserve [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the bundled QR encoder when redistributing this project.
