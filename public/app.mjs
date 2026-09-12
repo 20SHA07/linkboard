@@ -1,3 +1,4 @@
+import { createInterfaceMotion } from './interface-motion.mjs';
 import { accountForms } from './account.mjs';
 import { initColorMode } from './color-mode.mjs';
 import { THEMES, SOCIALS, icon, escapeHTML as e, renderPage, safeLink, isHosted, blankPage } from './core.mjs';
@@ -6,6 +7,7 @@ import { studioHTML, bindStudio, linkStyleHTML, prepareImage } from './studio.mj
 import { createQR } from './qr.mjs';
 
 const $=id=>document.getElementById(id);
+const uiMotion=createInterfaceMotion();
 const state={pages:[],page:null,saved:null,dirty:false,saving:false,view:'links',origin:'',demo:false,stats:null,previewTimer:null,previewMode:'page',uploads:0,user:null,maxPages:5};
 let toastTimer,dragId=null,undoAction=null;
 const viewCopy={links:['BUILD YOUR PAGE','A home for your links.','The good stuff, all in one place.'],appearance:['SET THE TONE','A little more you.','Find a look that feels right.'],insights:['FOLLOW THE CONNECTIONS','See what’s clicking.','A simple look at how people find you.'],share:['TAKE IT WITH YOU','One page. Everywhere.','Share a link, print a code, spread the word.'],settings:['THE LITTLE DETAILS','Make yourself at home.','Your page, just the way you want it.']};
@@ -19,10 +21,10 @@ async function api(path,method='GET',body){
   if(!response.ok){const error=new Error(data.error||'Something went wrong.');error.status=response.status;if(response.status===401&&!path.startsWith('/api/auth/')&&path!=='/api/login'){showLogin();}throw error;}
   return data;
 }
-function toast(message,undo){clearTimeout(toastTimer);$('toast-text').textContent=message;$('toast').hidden=false;undoAction=undo||null;$('toast-action').hidden=!undo;toastTimer=setTimeout(()=>$('toast').hidden=true,undo?9000:6500);}
+function toast(message,undo){clearTimeout(toastTimer);$('toast-text').textContent=message;$('toast').hidden=false;uiMotion.reveal($('toast'),{distance:5,duration:180});undoAction=undo||null;$('toast-action').hidden=!undo;toastTimer=setTimeout(()=>$('toast').hidden=true,undo?9000:6500);}
 const accounts=accountForms({root:$('account-root'),api,onAuthenticated:boot,onSignedOut:()=>{state.page=null;state.pages=[];state.dirty=false;state.user=null;}});
 function showLogin(view=location.pathname==='/signup'?'signup':'login'){ $('boot').hidden=true;$('app').hidden=true;$('login').hidden=false;accounts.show(view); }
-function openModal(title,content){$('modal').classList.remove('wide-modal');$('modal-title').textContent=title;$('modal-body').innerHTML=content;fillIcons($('modal'));if(!$('modal').open)$('modal').showModal();}
+function openModal(title,content){$('modal').classList.remove('wide-modal');$('modal-title').textContent=title;$('modal-body').innerHTML=content;fillIcons($('modal'));if(!$('modal').open){$('modal').showModal();uiMotion.reveal($('modal'),{distance:9,duration:220});}}
 function confirmAction(title,message,label='Continue'){
   return new Promise(resolve=>{
     openModal(title,`<p>${e(message)}</p><div class="button-row"><button class="btn secondary" id="confirm-cancel">Cancel</button><button class="btn primary" id="confirm-ok">${e(label)}</button></div>`);
@@ -55,7 +57,7 @@ function renderAppearance(){
   const p=state.page;if(!p)return;
   $('theme-grid').innerHTML=Object.entries(THEMES).map(([id,t])=>`<button class="theme-option" data-theme="${id}" aria-label="${t.name} theme" aria-pressed="${p.theme===id}"><span class="theme-mini" style="background:${t.bg}"><b style="background:${t.ink}"></b><i style="background:${t.card}"></i><i style="background:${t.card}"></i><i style="background:${t.card}"></i></span><span class="theme-name">${t.name}${p.theme===id?icon('check'):''}</span></button>`).join('');
   const openGroups=[...$('design-studio').querySelectorAll('details[open]')].map(el=>el.dataset.studioGroup);
-  $('design-studio').innerHTML=studioHTML(p);if(openGroups.length)$('design-studio').querySelectorAll('details').forEach(el=>el.open=openGroups.includes(el.dataset.studioGroup));
+  $('design-studio').innerHTML=studioHTML(p);uiMotion.detailOpen($('design-studio'));if(openGroups.length)$('design-studio').querySelectorAll('details').forEach(el=>el.open=openGroups.includes(el.dataset.studioGroup));
   $('font-select').value=p.font;document.querySelectorAll('[data-shape]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.shape===p.shape));$('branding-toggle').checked=p.branding;$('remove-avatar').disabled=!p.avatar;
 }
 function renderPageEditor(){
@@ -84,10 +86,11 @@ async function savePage(publish=state.page?.published){
   finally{state.saving=false;document.querySelector('.editor-column').inert=false;refreshToolbar();}
 }
 function switchView(view){
-  if(!viewCopy[view])view='links';state.view=view;
+  if(!viewCopy[view])view='links';const changed=state.view!==view;state.view=view;
   const copy=viewCopy[view];$('view-eyebrow').textContent=copy[0];$('view-title').textContent=copy[1];$('view-description').textContent=copy[2];
   document.querySelectorAll('[data-panel]').forEach(el=>el.hidden=el.dataset.panel!==view||!state.page);
   document.querySelectorAll('[data-view]').forEach(el=>{el.classList.toggle('active',el.dataset.view===view);if(el.dataset.view===view)el.setAttribute('aria-current','page');else el.removeAttribute('aria-current');});
+  if(changed&&state.page)uiMotion.reveal(document.querySelector('[data-panel="'+view+'"]'));
   if(state.page&&view==='insights')loadStats().catch(error=>toast(error.message));if(state.page&&view==='share')renderShare();
 }
 function moveLink(id,offset){const items=state.page.links,from=items.findIndex(l=>l.id===id),to=from+offset;if(from<0||to<0||to>=items.length)return;items.splice(to,0,items.splice(from,1)[0]);renderLinks();markDirty();}
@@ -179,6 +182,9 @@ async function deletePage(){
   $('delete-form').onsubmit=async event=>{event.preventDefault();event.submitter.disabled=true;try{await api('/api/pages/'+p.id,'DELETE',{version:p.version,confirm:$('delete-confirm').value});$('modal').close();state.dirty=false;await loadWorkspace();toast('Page deleted.');}catch(error){$('modal-error').textContent=error.message;event.submitter.disabled=false;}};
 }
 function bindEvents(){
+  uiMotion.background(document.querySelector('.navigation'),'.nav-item[data-view]');
+  uiMotion.background(document.querySelector('.device-choices'),'button[data-device]');
+  uiMotion.background($('shape-picker'),'button[data-shape]');
   initColorMode({controls:document.querySelectorAll('[data-editor-mode]'),onApply(){const meta=document.querySelector('meta[name="theme-color"]');if(meta)meta.setAttribute('content',getComputedStyle(document.documentElement).getPropertyValue('--bg').trim());}});
   $('preview-mode').onchange=()=>{state.previewMode=$('preview-mode').value;renderPreview();};
   bindStudio({root:$('design-studio'),getPage:()=>state.page,onChange:markDirty,onRender:renderAppearance,onError:toast,onBusy:busy=>{state.uploads+=busy?1:-1;refreshToolbar();}});

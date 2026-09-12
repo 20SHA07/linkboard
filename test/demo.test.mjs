@@ -34,3 +34,18 @@ test('editor controls reference existing static or modal elements',async()=>{
   const ids=new Set([...`${html}\n${app}\n${studio}`.matchAll(/\bid="([a-z][a-z0-9-]*)"/g)].map(m=>m[1]));
   const missing=[...app.matchAll(/\$\('([a-z][a-z0-9-]*)'\)/g)].map(m=>m[1]).filter(id=>!ids.has(id));assert.deepEqual([...new Set(missing)],[]);
 });
+
+test('Pages demo builds for repository subpaths with embedded assets and clear local-only wording',async t=>{
+  const dir=await mkdtemp(join(tmpdir(),'linkboard-pages-'));t.after(()=>rm(dir,{recursive:true,force:true}));
+  const script=fileURLToPath(new URL('../scripts/build-pages.mjs',import.meta.url));
+  const build=spawnSync(process.execPath,[script,dir],{encoding:'utf8'});assert.equal(build.status,0,build.stderr);
+  const html=await readFile(join(dir,'index.html'),'utf8');
+  assert(html.includes('<title>Linkboard | Interactive editor demo</title>'));
+  assert(html.includes('Accounts and public publishing require the hosted app.'));
+  const scripts=[...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)];
+  assert.equal(scripts.length,1);assert(scripts.every(s=>!s[1].includes('src=')));
+  assert(!/<link[^>]+rel="stylesheet"/i.test(html));
+  assert(!/href="\/(?:favicon|app|refine)/i.test(html));
+  assert(html.includes('Copyright (c) 2024 ibelick'));assert(html.includes('installDemoAPI(Core)'));
+  assert.equal(await readFile(join(dir,'.nojekyll'),'utf8'),'');
+});

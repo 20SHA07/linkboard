@@ -1,6 +1,20 @@
-# Put your QMC page on GitHub Pages
+# GitHub Pages: interactive demo or QMC website
 
-For the full signup/login platform, use the Cloudflare + Supabase setup in [README.md](README.md). This guide is only for a public static page.
+For the full signup/login platform, use the Cloudflare + Supabase setup in [README.md](README.md). GitHub Pages hosts the browser-only demo or an exported public page.
+
+## Publish the Linkboard demo from this repository
+
+The committed `docs/index.html` contains the whole demo, including its styles, motion helpers, and QR encoder. No package install or build service is required to publish it.
+
+1. Open **Settings → Pages** in `20SHA07/linkboard`.
+2. Choose **Deploy from a branch**, **main**, and **/docs**, then **Save**. If Pages already uses **main / (root)**, that also works: the root entry page opens the demo in `docs/`.
+3. Wait for **pages build and deployment** to complete in Actions, then use **Visit site**. The project address is `https://20sha07.github.io/linkboard/`.
+
+Future interface edits require `npm run pages` with Node.js 24+, then committing the regenerated `docs/index.html`. GitHub serves the committed output. `npm run demo` separately refreshes the downloadable `linkboard-demo.html`.
+
+The demo is labelled as such. Each visitor edits their own browser-local copy; changes are not shared, accounts are unavailable, and there are no live analytics. Use Settings to download a backup or website. Clearing browser storage can remove local edits.
+
+## Publish QMC's finished page
 
 GitHub Pages can serve the exported QMC website for free from a public repository. It serves static HTML, CSS, and JavaScript. The exported page includes its images, light/dark modes, active social links, and on-page QR code and sharing menu in one file.
 

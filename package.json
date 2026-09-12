@@ -1,6 +1,6 @@
 {
   "name": "linkboard",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
   "type": "module",
   "description": "A free, self-hostable link page platform with individual accounts and a desktop design studio.",
@@ -13,6 +13,7 @@
     "owner-key": "node scripts/owner-key.mjs",
     "deploy": "node --env-file-if-exists=.env scripts/deploy.mjs",
     "demo": "node scripts/build-preview.mjs",
-    "configure": "node scripts/configure.mjs"
+    "configure": "node scripts/configure.mjs",
+    "pages": "node scripts/build-pages.mjs"
   }
 }

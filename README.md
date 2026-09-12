@@ -2,7 +2,15 @@
 
 A free, self-hostable link page platform. Anyone can create an account, verify their email, and build pages in a desktop design studio. Published pages have their own addresses, light/dark modes, and optional on-page QR codes.
 
-Version 2 adds individual accounts, public registration, password recovery, page ownership, a new public home page, desktop layouts, and moderation. The code is MIT-licensed. There is no paid feature tier in this app. Hosting providers have usage limits; unlimited free hosting forever is not a promise this project can make.
+Version 2 adds individual accounts, public registration, password recovery, page ownership, a new public home page, desktop layouts, and moderation. Version 2.1 refines the interface and adds an interactive GitHub Pages demo. The code is MIT-licensed. There is no paid feature tier in this app. Hosting providers have usage limits; unlimited free hosting forever is not a promise this project can make.
+
+## Interface and motion
+
+The interface uses native adaptations of [Motion Primitives](https://github.com/ibelick/motion-primitives): an animated selection background, panel reveals, and staggered card entrances. These preserve existing controls, form state, and keyboard focus. Reduced-motion preferences cancel animations immediately, and content stays usable if animation APIs are unavailable. Shared styling gives the landing page and desktop studio calmer spacing, surfaces, and light/dark colours.
+
+Motion Primitives itself uses React and Motion. This release ports selected patterns to the Web Animations API; it does not install or bundle the React components. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for source attribution and the MIT licence.
+
+Run `npm run pages` to regenerate the self-contained demo in `docs/index.html`. It can be served from **main /docs**, or **main / (root)** through the root entry page. This demo saves locally and supports website export; it does not create accounts or publish edits. See [GITHUB_PAGES.md](GITHUB_PAGES.md).
 
 ## What you can use
 
@@ -34,6 +42,8 @@ This is a working core alternative, not a complete copy of every Linktree produc
 You do not host the website on Supabase in this setup. You use its Auth service only. There are no application tables or migrations to put in Supabase, and no Supabase Storage, R2, Firebase, Vercel, or paid SDK is needed. D1 is accessed only by the Worker, never directly from the browser. The API enforces account ownership on every private page operation.
 
 GitHub Pages is suitable for an exported public QMC page. The full service needs the Worker API and database. GitHub also discourages Pages use for sensitive transactions such as sending passwords and restricts commercial SaaS hosting. Keep the account service on Cloudflare. See [GitHub Pages limits](https://docs.github.com/en/pages/getting-started-with-github-pages/github-pages-limits) and [GITHUB_PAGES.md](GITHUB_PAGES.md).
+
+Vercel is optional, and importing this repository there does not deploy the current backend. The Worker uses Cloudflare's D1 and asset bindings, so Vercel would need a backend/database migration. Its Hobby plan is restricted to personal, non-commercial use. For this codebase, Cloudflare Workers + D1 + Supabase Auth is the direct deployment path. Sources: [D1 Worker API](https://developers.cloudflare.com/d1/worker-api/) and [Vercel Hobby](https://vercel.com/docs/plans/hobby).
 
 ## Set up Supabase Auth
 

@@ -1,0 +1,143 @@
+/* Shared surface refinements. The editor and public pages retain their own layouts. */
+:root {
+  --lb-selected: #eae5fb;
+  --lb-selected-ink: #443584;
+  --lb-focus: #7763d1;
+  --lb-shadow: 0 2px 8px #25203604, 0 12px 32px #25203604;
+}
+:root[data-color-mode=dark] {
+  --lb-selected: #443655;
+  --lb-selected-ink: #eee4ff;
+  --lb-focus: #c8b5ff;
+  --lb-shadow: 0 2px 8px #00000012, 0 12px 32px #00000016;
+}
+
+/* Calm the landing page without losing its colour and editorial character. */
+.site-nav { padding-top: 25px; padding-bottom: 25px; }
+.hero { max-width: 1440px; gap: 7%; padding-top: 58px; padding-bottom: 86px; }
+.hero h1 { font-size: clamp(54px, 6.4vw, 94px); letter-spacing: -.06em; line-height: 1.03; }
+.hero h1 em { letter-spacing: -.06em; }
+.hero-description { max-width: 420px; line-height: 1.8; }
+.hero-art { display: grid; grid-template-columns: 1fr auto; gap: 18px; padding: 20px 0; }
+.art-label { grid-column: 1 / -1; margin: 0 4px 0 0; opacity: .75; }
+.example-board {
+  grid-column: 1 / -1;
+  transform: none;
+  border-color: color-mix(in srgb, var(--sample-ink) 22%, transparent);
+  border-radius: 24px;
+  padding: 30px;
+  box-shadow: 0 16px 50px #34295012;
+}
+.example-links > div { border-color: color-mix(in srgb, var(--sample-ink) 18%, transparent); }
+.palette-note { position: static; transform: none; padding: 14px 18px; box-shadow: none; }
+.palette-note > span { font-family: inherit; font-style: normal; font-size: 11px; }
+.palette-note button { transition: outline-offset .16s ease, transform .16s ease; }
+.palette-note button:hover { transform: translateY(-2px); }
+.palette-note button[aria-pressed=true] { outline-offset: 2px; }
+.floating-note {
+  position: static;
+  transform: none;
+  align-self: center;
+  background: transparent;
+  color: var(--muted);
+  padding: 8px 0 8px 12px;
+  text-align: right;
+}
+.type-ribbon { padding-top: 20px; padding-bottom: 20px; }
+.feature-card { border: 1px solid #302b3910; border-radius: 22px; padding: 30px; }
+.feature-card p { font-size: 13px; }
+.feature-symbol, .day-night { height: 140px; }
+.section { scroll-margin-top: 28px; }
+.faq-section summary { padding-right: 18px; }
+.site-nav nav a, .login-link, .site-footer a { text-underline-offset: 5px; }
+:root[data-color-mode=dark] .example-board { box-shadow: 0 16px 50px #00000025; }
+:root[data-color-mode=dark] .floating-note { color: var(--muted); }
+
+/* More breathing room and quieter surfaces in the desktop workspace. */
+.app-header { border-bottom-color: var(--line); }
+.header-actions { margin-left: auto; }
+.page-heading { margin-bottom: 28px; }
+.page-heading h1 { font-size: 30px; letter-spacing: -.9px; }
+.page-heading > div > p:last-child { max-width: 470px; }
+.profile-card, .link-row, .settings-card, .stat, .studio-group {
+  box-shadow: var(--lb-shadow);
+  border-color: var(--line);
+}
+.profile-card { padding: 24px; margin-bottom: 30px; }
+.link-list { gap: 14px; }
+.link-row { padding: 19px 18px; }
+.link-input.title { font-size: 13px; }
+.link-input, .profile-bio { font-size: 12px; }
+.link-input:hover, .profile-name:hover, .profile-bio:hover { border-color: var(--line); }
+.profile-name:focus, .profile-bio:focus, .link-input:focus { border-color: var(--lb-focus); }
+.studio-group > summary { border-radius: inherit; }
+.studio-group[open] > summary { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.theme-option, .layout-presets > button { transition: border-color .16s ease, box-shadow .16s ease; }
+.theme-option:hover, .layout-presets > button:hover { border-color: var(--lb-focus); box-shadow: var(--lb-shadow); }
+.theme-option[aria-pressed=true] { border-color: var(--lb-focus); }
+.preview-column { background: #eeeaf1; }
+.phone-frame { box-shadow: 0 16px 48px #342b4612; }
+.phone-frame.desktop-frame { border-radius: 16px; }
+.device-choices { padding: 5px; margin-bottom: 22px; }
+.device-choices button { min-height: 32px; padding-right: 19px; padding-left: 19px; }
+.segmented { background: var(--paper); border-color: var(--line); }
+.segmented button { color: var(--muted); }
+.nav-item.active, .segmented button[aria-pressed=true], .device-choices button[aria-pressed=true] {
+  background: var(--lb-selected);
+  color: var(--lb-selected-ink);
+}
+.switch input:checked + span { background: #8170bb; }
+.login-story:after { font-size: 195px; bottom: 26px; right: -32px; opacity: .5; }
+.login-form input:not([type=checkbox]):focus { border-color: var(--lb-focus); }
+:root[data-color-mode=dark] .preview-column { background: #1b1922; }
+:root[data-color-mode=dark] :is(.profile-card, .link-row, .settings-card, .stat, .studio-group) { box-shadow: var(--lb-shadow); }
+:root[data-color-mode=dark] .segmented { background: var(--paper); border-color: var(--line); }
+:root[data-color-mode=dark] .nav-item.active { background: var(--lb-selected); color: var(--lb-selected-ink); }
+:root[data-color-mode=dark] :is(.segmented, .device-choices) button[aria-pressed=true] { background: var(--lb-selected); color: var(--lb-selected-ink); }
+:root[data-color-mode=dark] .switch input:checked + span { background: #b7a3e7; }
+:root :focus-visible { outline-color: var(--lb-focus); }
+
+/* Selected controls keep their ordinary backgrounds until motion is measured. */
+.lb-motion-track { position: relative; isolation: isolate; }
+.lb-motion-indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  background: var(--lb-selected);
+  border-radius: 10px;
+  visibility: hidden;
+  z-index: 0;
+}
+.lb-motion-track > button { position: relative; z-index: 1; }
+.lb-motion-ready > .lb-motion-indicator { visibility: visible; }
+.device-choices > .lb-motion-indicator { border-radius: 6px; }
+.segmented > .lb-motion-indicator { border-radius: 7px; }
+:root .lb-motion-track.lb-motion-ready .nav-item.active,
+:root .lb-motion-track.lb-motion-ready button[aria-pressed=true] {
+  background: transparent;
+  color: var(--lb-selected-ink);
+}
+
+@media (min-width: 1101px) {
+  .editor-column { padding: 38px clamp(24px, 2.4vw, 40px) 48px; }
+  .preview-column { padding: 32px clamp(24px, 2.4vw, 40px); }
+}
+@media (max-width: 760px) {
+  .hero { gap: 26px; padding-top: 32px; padding-bottom: 52px; }
+  .hero h1 { font-size: clamp(52px, 11vw, 80px); }
+  .hero-art { width: 100%; max-width: 470px; margin: 0 auto; padding: 16px 0; gap: 14px; }
+  .example-board { padding: 24px; border-radius: 20px; }
+  .palette-note { padding: 12px; }
+  .floating-note { font-size: 9px; padding-left: 0; }
+  .feature-card { padding: 25px; }
+  .feature-symbol, .day-night { height: auto; }
+}
+@media (max-width: 650px) {
+  .profile-card { padding: 18px; }
+  .link-row { padding: 16px 12px; }
+  .page-heading h1 { font-size: 28px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lb-motion-indicator, .theme-option, .layout-presets > button, .palette-note button { transition: none !important; animation: none !important; }
+}
