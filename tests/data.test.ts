@@ -19,6 +19,7 @@ beforeEach(() => {
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', '');
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', '');
   vi.stubEnv('NEXT_PUBLIC_BASE_PATH', '');
+  vi.stubEnv('NEXT_PUBLIC_STATIC_EXPORT', '');
   vi.stubGlobal('window', { location: { origin: 'https://links.example.com' } });
   backend.createClient.mockReturnValue({
     auth: {
@@ -70,6 +71,20 @@ describe('configuration and authentication boundaries', () => {
       expect(backend.createClient).not.toHaveBeenCalled();
     },
   );
+
+  it('requires a configured hosted backend in static mode and never calls a missing server API', async () => {
+    vi.stubEnv('NEXT_PUBLIC_STATIC_EXPORT', 'true');
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const data = await import('../lib/data');
+    expect(data.usesSupabase).toBe(true);
+    await expect(data.getCurrentUser()).rejects.toThrow(/not fully configured/i);
+    await expect(data.signUp('owner@example.com', 'a-long-test-password')).rejects.toThrow(
+      /not fully configured/i,
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(backend.createClient).not.toHaveBeenCalled();
+  });
 
   it('surfaces auth outages instead of switching to another backend', async () => {
     const data = await configuredData();
@@ -154,12 +169,39 @@ describe('configuration and authentication boundaries', () => {
       'Email rate limit exceeded',
     );
   });
+
+  it('keeps the GitHub Pages project path in the signup confirmation redirect', async () => {
+    vi.stubEnv('NEXT_PUBLIC_STATIC_EXPORT', 'true');
+    vi.stubEnv('NEXT_PUBLIC_BASE_PATH', '/linkboard');
+    vi.stubGlobal('window', { location: { origin: 'https://20sha07.github.io' } });
+    const data = await configuredData();
+    backend.signUp.mockResolvedValue({ data: { session: null }, error: null });
+    await data.signUp('owner@example.com', 'a-long-test-password');
+    expect(backend.signUp).toHaveBeenCalledWith({
+      email: 'owner@example.com',
+      password: 'a-long-test-password',
+      options: { emailRedirectTo: 'https://20sha07.github.io/linkboard/' },
+    });
+  });
 });
 
 describe('built-in server API', () => {
   beforeEach(() => {
     // Keep account-change messages inside this test process; no browser or storage is used.
     vi.stubGlobal('BroadcastChannel', undefined);
+  });
+
+  it('prefixes server API requests when the app is hosted below a project path', async () => {
+    vi.stubEnv('NEXT_PUBLIC_BASE_PATH', '/linkboard');
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ account: null }));
+    vi.stubGlobal('fetch', fetchMock);
+    const data = await import('../lib/data');
+    expect(await data.getCurrentUser()).toBeNull();
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/linkboard/api/auth/session',
+      expect.objectContaining({ credentials: 'same-origin', cache: 'no-store' }),
+    );
+    expect(backend.createClient).not.toHaveBeenCalled();
   });
 
   it('creates an account, signs in, and signs out through the cookie-authenticated API', async () => {

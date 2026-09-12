@@ -10,6 +10,8 @@ next-env.d.ts
 *.log
 .npm-cache/
 artifacts/
+.pages-build/
+out-pages/
 data/
 *.sqlite
 *.sqlite-shm

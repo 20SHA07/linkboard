@@ -7,17 +7,7 @@ import { getPublicProfile, trackClick } from '@/lib/data';
 import type { Profile } from '@/lib/types';
 import ProfileCard, { profileThemeStyle } from '@/components/profile-card';
 import QRCode from '@/components/qr-code';
-
-function profileUrl(username: string): string {
-  const configured = process.env.NEXT_PUBLIC_SITE_URL;
-  try {
-    const base = new URL(configured || window.location.origin);
-    if (!['http:', 'https:'].includes(base.protocol)) throw new Error('Invalid site URL');
-    return new URL(`/u/${encodeURIComponent(username)}`, base.origin).href;
-  } catch {
-    return new URL(`/u/${encodeURIComponent(username)}`, window.location.origin).href;
-  }
-}
+import { publicProfileUrl } from '@/lib/urls';
 
 export default function PublicProfile({ username }: { username: string }) {
   const [retry, setRetry] = useState(0);
@@ -44,7 +34,7 @@ export default function PublicProfile({ username }: { username: string }) {
           key: requestKey,
           profile: result,
           error: false,
-          url: result ? profileUrl(result.username) : '',
+          url: result ? publicProfileUrl(result.username, window.location.origin) : '',
         });
         setCopied(false);
         setCopyError(false);

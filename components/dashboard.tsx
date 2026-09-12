@@ -32,12 +32,14 @@ import {
 } from 'lucide-react';
 import { getCurrentUser, loadDashboard, saveProfile, signOut, subscribeAuth } from '@/lib/data';
 import { validateProfile } from '@/lib/validation';
+import { publicProfileUrl, isStaticExport } from '@/lib/urls';
 import type { Account, ClickEvent, Platform, Profile, Theme } from '@/lib/types';
 import ProfileCard from './profile-card';
 import QRCode from './qr-code';
 import { PlatformIcon } from './icons';
 import { AnimatedBackground } from './motion/animated-background';
 import { TransitionPanel } from './motion/transition-panel';
+import ThemeToggle from './theme/toggle';
 
 type Tab = 'links' | 'appearance' | 'analytics' | 'qr' | 'settings';
 const navigation = [
@@ -259,8 +261,7 @@ export default function Dashboard() {
       if (sequence === loadSequence.current) setRefreshing(false);
     }
   }
-  const pageUrl =
-    origin && savedProfile ? `${origin}/u/${encodeURIComponent(savedProfile.username)}` : '';
+  const pageUrl = origin && savedProfile ? publicProfileUrl(savedProfile.username, origin) : '';
   const displayUrl = pageUrl.replace(/^https?:\/\//, '');
   async function copyUrl() {
     if (!pageUrl) return;
@@ -472,6 +473,7 @@ export default function Dashboard() {
             <strong>{activeTab}</strong>
           </div>
           <div className="topbar-actions">
+            <ThemeToggle compact />
             {savedProfile?.published ? (
               <a
                 className="button secondary view-page"
@@ -1023,7 +1025,7 @@ export default function Dashboard() {
                   <label>
                     Username
                     <div className="username-input">
-                      <span>/u/</span>
+                      <span>{isStaticExport ? '/u/?username=' : '/u/'}</span>
                       <input
                         value={profile.username}
                         minLength={3}

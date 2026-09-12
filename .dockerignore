@@ -13,6 +13,8 @@ test-results
 .agents
 .npm-cache
 artifacts
+.pages-build
+out-pages
 data
 *.sqlite
 *.sqlite-*

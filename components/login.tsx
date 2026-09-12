@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowRight, Loader2 } from 'lucide-react';
 import { getCurrentUser, signIn, signUp } from '@/lib/data';
 import { validateEmail } from '@/lib/validation';
+import ThemeToggle from './theme/toggle';
 
 export default function Login() {
   const router = useRouter();
@@ -97,6 +98,9 @@ export default function Login() {
         <span className="auth-story-footer">Your links. Your style. Your corner.</span>
       </aside>
       <main className="auth-main">
+        <div className="auth-theme-controls">
+          <ThemeToggle />
+        </div>
         <form className="auth-form" onSubmit={submit} aria-labelledby="auth-heading">
           <span className="eyebrow">MAKE YOURSELF AT HOME</span>
           <h2 id="auth-heading">

@@ -183,6 +183,26 @@ try {
   console.log(
     'PASS: Production HTTP registration, login, private profiles, owner isolation, click tracking, restart persistence, and session revocation.',
   );
+  if (process.argv.includes('--review')) {
+    if (!process.stdin.isTTY) throw new Error('Interactive review requires a terminal.');
+    console.log(JSON.stringify({ url: origin, email: 'owner-a@example.com', password }));
+    console.log(
+      'This account exists only in the temporary test database. Press Enter to stop and remove it.',
+    );
+    await new Promise((resolve) => {
+      const done = () => {
+        process.stdin.off('data', done);
+        process.off('SIGINT', done);
+        process.off('SIGTERM', done);
+        process.stdin.pause();
+        resolve();
+      };
+      process.stdin.once('data', done);
+      process.once('SIGINT', done);
+      process.once('SIGTERM', done);
+      process.stdin.resume();
+    });
+  }
 } finally {
   await stop();
   // Only remove the fresh temporary directory allocated by this verification run.

@@ -1,8 +1,8 @@
 # Linkboard
 
-A self-hostable link-in-bio application built with Next.js, React, TypeScript, SQLite, and the open-source `qrcode` library. Create an account, customize a profile through the dashboard, and publish it at `/u/username`. Each user has a separate profile, links, theme, and private click analytics.
+A self-hostable link-in-bio application built with Next.js, React, TypeScript, SQLite, and the open-source `qrcode` library. Create an account, customize a profile through the dashboard, and publish its personal public address. Each user has a separate profile, links, theme, and private click analytics.
 
-The default installation includes real authentication and a persistent SQLite database. It starts with no accounts or sample profiles. Supabase is an optional backend for serverless hosting or deployments that prefer managed authentication and Postgres.
+The default server installation includes real authentication and a persistent SQLite database. It starts with no accounts or sample profiles. Supabase supports GitHub Pages, serverless hosting, and deployments that prefer managed authentication and Postgres. The Pages build exports the React application with real Supabase accounts and shared data.
 
 The interface uses adapted [Motion Primitives](https://github.com/ibelick/motion-primitives) effects for the navigation highlight, dashboard transitions, and public link entrances. They respect the device's reduced-motion preference. The selected components live in `components/motion/`, use the existing CSS, and retain their MIT attribution in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
@@ -19,15 +19,16 @@ Open [http://localhost:3000](http://localhost:3000), choose **Create account**, 
 
 No external service or environment configuration is required for this local installation. The server creates `data/linkboard.sqlite` automatically. Accounts, profiles, sessions, and clicks persist across browser sessions and application restarts. Use a different email address to create another account; every account has its own dashboard.
 
-| Command             | Purpose                                          |
-| ------------------- | ------------------------------------------------ |
-| `npm run dev`       | Start the development server                     |
-| `npm run build`     | Build the production application                 |
-| `npm start`         | Serve the production build                       |
-| `npm run lint`      | Run ESLint                                       |
-| `npm run typecheck` | Check TypeScript                                 |
-| `npm test`          | Run automated tests                              |
-| `npm run test:http` | Verify the production HTTP server after building |
+| Command               | Purpose                                          |
+| --------------------- | ------------------------------------------------ |
+| `npm run dev`         | Start the development server                     |
+| `npm run build`       | Build the production application                 |
+| `npm run build:pages` | Export the Supabase-backed app to `out-pages/`   |
+| `npm start`           | Serve the production build                       |
+| `npm run lint`        | Run ESLint                                       |
+| `npm run typecheck`   | Check TypeScript                                 |
+| `npm test`            | Run automated tests                              |
+| `npm run test:http`   | Verify the production HTTP server after building |
 
 ## Customize your profile
 
@@ -35,21 +36,23 @@ Open the dashboard at `/` after signing in. **Edit profile** lets you change you
 
 Use **My links** to add destinations, edit labels and URLs, choose a social platform, change the order, and enable or disable individual links. Supported platforms include Instagram, X/Twitter, TikTok, YouTube, LinkedIn, GitHub, Spotify, websites, and email. A profile supports up to 30 links.
 
-Use **Appearance** to select a theme or custom background color. The live preview shows your pending edits. Choose **Save changes** to persist them. Turn on **Publish your page** in the profile settings, save, and open `/u/your-username` to see the public page. Visitors receive only published profiles and enabled links.
+Use **Appearance** to select a theme or custom background color. The live preview shows your pending edits. Choose **Save changes** to persist them. Turn on **Publish your page** in the profile settings, save, and use **Open your page** to visit the generated public address. Visitors receive only published profiles and enabled links.
+
+The interface theme control offers **Light**, **Dark**, and **System**. System follows your device preference. The choice is saved in this browser under `linkboard.theme`; it contains only a display preference. Your public profile's background and theme remain controlled by the profile owner through **Appearance**.
 
 Link destinations accept absolute `https://` or `http://` URLs and single-address `mailto:` URLs without extra parameters. Scripts, embedded data, relative destinations, credential-bearing URLs, and malformed input are rejected by validation. Avatar URLs must use HTTPS. Images are loaded from the host you supply, which receives normal image requests from visitors.
 
 ## Share the page and QR code
 
-The **QR code** view and **Share your page** dialog display the profile's QR code and let you download a PNG. The public profile also displays a downloadable QR code. It encodes the site's origin plus the saved `/u/username` address.
+The **QR code** view and **Share your page** dialog display the profile's QR code and let you download a PNG. The public profile also displays a downloadable QR code. It encodes the saved profile address for the current hosting mode: `/u/username` on a server, or `/linkboard/u/?username=username` on the configured GitHub Pages project. The application creates these links automatically; account and profile customization still happens entirely through dashboard forms.
 
-Before a production build, set `NEXT_PUBLIC_SITE_URL` to your final public origin, such as `https://links.example.com`. Use an origin only, without a path. Without this setting, QR generation uses the currently open site's origin. A localhost QR works only on the device running the app; download the final QR after deployment and scan it from another device before printing it.
+Before a production build, set `NEXT_PUBLIC_SITE_URL` to your final public origin, such as `https://links.example.com`. Use an origin only, without a path. For a project site, set `NEXT_PUBLIC_BASE_PATH` separately, such as `/linkboard`. Without a configured origin, QR generation uses the currently open site's origin. A localhost QR works only on the device running the app; download the final QR after deployment and scan it from another device before printing it.
 
 Changing your username changes the public address. Save first, then download and redistribute the updated QR code.
 
 ## Default backend: SQLite and server authentication
 
-With all Supabase variables empty, Linkboard uses its own server API and SQLite database. `LINKBOARD_DATABASE_PATH` overrides the default `data/linkboard.sqlite` path. This path is server-only and must point to a writable, persistent directory in production. The server initializes its schema automatically.
+In a normal server build with all Supabase variables empty, Linkboard uses its own server API and SQLite database. `LINKBOARD_DATABASE_PATH` overrides the default `data/linkboard.sqlite` path. This path is server-only and must point to a writable, persistent directory in production. The server initializes its schema automatically.
 
 Passwords are stored as salted scrypt hashes. A successful login creates a random session token; the database stores a hash of the token. The browser receives an `HttpOnly`, `SameSite=Lax` session cookie with a 30-day expiry. Cookies are also `Secure` when the configured site origin or direct request uses HTTPS. Signing out revokes the session. Authenticated API operations derive ownership from the session, so supplying another user's profile ID does not grant access to that profile or its analytics.
 
@@ -71,12 +74,12 @@ Run the built-in database with a single application instance on persistent stora
 
 ## Optional backend: Supabase
 
-Supabase provides shared Postgres storage and managed authentication. It is the supported backend for Vercel and Netlify. Switching providers selects a different account database; existing SQLite users and profiles are not migrated automatically.
+Supabase provides shared Postgres storage and managed authentication. It is the required backend for GitHub Pages, Vercel, and Netlify. Switching providers selects a different account database; existing SQLite users and profiles are not migrated automatically.
 
 1. Create a Supabase project, or run your own Supabase instance.
 2. Run the entire [`supabase/schema.sql`](supabase/schema.sql) in its SQL editor before registering users. This creates the profiles, click events, constraints, RLS policies, and restricted public functions. Keep the `private` schema out of Supabase's exposed API schemas.
 3. Copy [`.env.example`](.env.example) to `.env.local`. Set `NEXT_PUBLIC_SUPABASE_URL` and one public key: `NEXT_PUBLIC_SUPABASE_ANON_KEY` or `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. If both keys are present, the publishable-key value takes precedence. Never use a service-role or secret key in browser configuration.
-4. Set `NEXT_PUBLIC_SITE_URL` to the final production origin. In Supabase **Authentication → URL Configuration**, set **Site URL** to that origin. Allow `http://localhost:3000/`, `http://localhost:3000/login`, and your production root/login URLs. The signup confirmation returns to `/`. Allow preview patterns only for deployments you control. See [Supabase redirect configuration](https://supabase.com/docs/guides/auth/redirect-urls).
+4. Set `NEXT_PUBLIC_SITE_URL` to the final production origin. In Supabase **Authentication → URL Configuration**, set **Site URL** to the app's root URL, including its project path when applicable. Allow `http://localhost:3000/`, `http://localhost:3000/login`, and your production app-root/login URLs. Signup confirmation returns to the app's root, including `NEXT_PUBLIC_BASE_PATH`. Allow preview patterns only for deployments you control. The exact GitHub Pages addresses appear below. See [Supabase redirect configuration](https://supabase.com/docs/guides/auth/redirect-urls).
 5. Enable email/password authentication. Keep email confirmation enabled for public registration, and configure a production SMTP sender in Supabase for reliable delivery.
 6. Restart development or rebuild and redeploy. Create an account at `/login`, confirm email if required, and sign in. The database creates an unpublished, empty profile for each account.
 
@@ -132,9 +135,52 @@ Import the repository, choose [Node.js 24](https://docs.netlify.com/build/config
 
 Netlify's free plan has a hard monthly usage limit that can pause sites when reached; review its [current pricing](https://www.netlify.com/pricing/). Supabase also has free-plan limits and may pause inactive projects; see [Supabase pricing](https://supabase.com/pricing).
 
-### GitHub Pages and static-only hosts
+## GitHub Pages deployment
 
-This repository requires a Next.js runtime for authentication/API routes and public usernames created after deployment. It is not configured for static export, and uploading `.next` to GitHub Pages will not work. Use the Node/Docker installation or a supported Next.js host with Supabase.
+The Pages target for this repository uses the origin `https://20sha07.github.io` and project path `/linkboard`. It serves exported React pages while Supabase handles authentication, profiles, and analytics. GitHub Pages cannot run the SQLite server or API routes, so this build requires a real Supabase project and never substitutes local or sample accounts.
+
+### Configure the account backend
+
+Complete the Supabase setup above, including `supabase/schema.sql`. In Supabase's authentication URL configuration, use:
+
+| Setting                     | Value                                        |
+| --------------------------- | -------------------------------------------- |
+| Site URL                    | `https://20sha07.github.io/linkboard/`       |
+| Allowed production redirect | `https://20sha07.github.io/linkboard/`       |
+| Allowed login redirect      | `https://20sha07.github.io/linkboard/login/` |
+
+If you run a local project-path preview against the same Supabase project, also allow the equivalent local root/login addresses. A production confirmation redirect must preserve `/linkboard/`.
+
+### Publish through GitHub Actions
+
+1. In the repository's **Settings → Secrets and variables → Actions → Variables**, add `NEXT_PUBLIC_SUPABASE_URL` and either `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` or `NEXT_PUBLIC_SUPABASE_ANON_KEY`. Use the project's actual public key. These values enter the browser bundle; never provide a service-role or secret key. See [GitHub repository variables](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-variables).
+2. In **Settings → Pages → Build and deployment**, choose **GitHub Actions** as the source. This publishes the generated application artifact from the current React code. See [GitHub Pages publishing sources](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site).
+3. Push the updated code to `main`, or run **Deploy GitHub Pages** manually from the repository's Actions tab. The supplied [Pages workflow](.github/workflows/pages.yml) reads the configured Pages origin/base path, runs the static build, uploads `out-pages/`, and deploys that artifact.
+4. Wait for the build and deployment jobs to succeed. Then open the deployed project, register a real account, customize and publish a profile, and verify the shared URL and QR from another browser.
+
+The workflow skips publishing and reports a warning if required backend configuration is missing. Once the variables are set, run **Deploy GitHub Pages** from the repository's Actions tab. A successful code build alone does not establish that the project is deployed or that your Supabase schema, email delivery, and access policies are configured.
+
+### Build the Pages artifact locally
+
+Set the following in `.env.local`, together with the actual Supabase URL and public key:
+
+```dotenv
+NEXT_PUBLIC_SITE_URL=https://20sha07.github.io
+NEXT_PUBLIC_BASE_PATH=/linkboard
+```
+
+Then run:
+
+```sh
+npm ci
+npm run build:pages
+```
+
+The script sets `NEXT_PUBLIC_STATIC_EXPORT=true` for its isolated build, excludes server API/database code, and writes the static artifact to `out-pages/`. It validates the HTTPS backend URL and public key format and rejects missing, secret, or service-role credentials. This structural check does not contact your project to verify that its configuration works. The normal server source and build remain available for Node/Docker deployments.
+
+Public profile addresses use `/linkboard/u/?username=your-name` so new accounts work without rebuilding a separate HTML file per username. This parameter selects a saved profile; names, bios, links, themes, and publishing are edited in the dashboard. Generated share links and QR codes include the project path automatically.
+
+The `out-pages/` artifact can also be served by another static host configured for the same base path and Supabase backend. Use `npm run build` for the normal server application and `npm run build:pages` for this static artifact.
 
 ## Verification
 
@@ -149,6 +195,8 @@ npm run test:http
 ```
 
 The test suite includes input validation, data access/authentication behavior, and database authorization checks. The HTTP check starts the production server with an isolated temporary SQLite database and verifies registration, login, private profiles, account isolation, click tracking, session revocation, and persistence after a server restart. It removes its temporary database afterward and does not use your installation's accounts or data.
+
+For manual visual checks, run `npm run test:http -- --review` in an interactive terminal. After the HTTP checks pass, it prints the temporary account's local URL and generated login credentials. Press Enter when finished to stop that test server and delete its database.
 
 Supabase SQL checks run in an isolated [PGlite](https://pglite.dev) PostgreSQL environment with substitutes for the managed auth table and helper. They do not test Supabase Auth, SMTP, PostgREST, or your deployed configuration.
 
@@ -165,16 +213,20 @@ Before sharing a deployment:
 
 ## Troubleshooting
 
-| Symptom                                              | Check                                                                                                |
-| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `node:sqlite` is unavailable                         | Use Node.js 24 for development, tests, builds, and the server runtime.                               |
-| Database cannot be opened                            | Check `LINKBOARD_DATABASE_PATH`, its parent directory's write permissions, and persistent storage.   |
-| Accounts disappear after replacing a container       | Restore the original persistent volume. Container-local files are not a durable deployment strategy. |
-| Serverless deployment reports configuration required | Set the public Supabase URL and one public key, apply the schema, and rebuild.                       |
-| Supabase login works but saving fails                | Run the complete schema and inspect the returned validation or permission error.                     |
-| Authentication fails behind a reverse proxy          | Set the final HTTPS `NEXT_PUBLIC_SITE_URL` before building; the browser origin must match it.        |
-| Supabase confirmation returns to localhost           | Update Supabase Site URL and allowed redirects for production.                                       |
-| Public profile is missing                            | Check the saved username, publishing state, network, and backend availability.                       |
-| QR points to an old domain                           | Correct `NEXT_PUBLIC_SITE_URL`, rebuild, and download the QR again.                                  |
-| Avatar does not appear                               | Use a directly accessible HTTPS image URL; inaccessible images use the fallback.                     |
-| Click totals look incomplete                         | Check enabled/published state, network requests, and the analytics limitations above.                |
+| Symptom                                              | Check                                                                                                                                           |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `node:sqlite` is unavailable                         | Use Node.js 24 for development, tests, builds, and the server runtime.                                                                          |
+| Database cannot be opened                            | Check `LINKBOARD_DATABASE_PATH`, its parent directory's write permissions, and persistent storage.                                              |
+| Accounts disappear after replacing a container       | Restore the original persistent volume. Container-local files are not a durable deployment strategy.                                            |
+| Serverless deployment reports configuration required | Set the public Supabase URL and one public key, apply the schema, and rebuild.                                                                  |
+| Pages build reports missing backend configuration    | Add the actual public Supabase URL and key to repository Actions variables or `.env.local`.                                                     |
+| Pages still serves an older root page                | Set Pages Source to **GitHub Actions** and rerun **Deploy GitHub Pages** after the current workflow succeeds.                                   |
+| Pages confirmation or QR loses `/linkboard/`         | Keep the canonical site value origin-only, set `NEXT_PUBLIC_BASE_PATH=/linkboard`, and allow the full project-root/login redirects in Supabase. |
+| Supabase login works but saving fails                | Run the complete schema and inspect the returned validation or permission error.                                                                |
+| Authentication fails behind a reverse proxy          | Set the final HTTPS `NEXT_PUBLIC_SITE_URL` before building; the browser origin must match it.                                                   |
+| Supabase confirmation returns to localhost           | Update Supabase Site URL and allowed redirects for production.                                                                                  |
+| Public profile is missing                            | Check the saved username, publishing state, network, and backend availability.                                                                  |
+| QR points to an old domain                           | Correct `NEXT_PUBLIC_SITE_URL`, rebuild, and download the QR again.                                                                             |
+| Avatar does not appear                               | Use a directly accessible HTTPS image URL; inaccessible images use the fallback.                                                                |
+| Click totals look incomplete                         | Check enabled/published state, network requests, and the analytics limitations above.                                                           |
+| Interface theme returns to System                    | Browser storage may be blocked or cleared. This affects display preference only, not account or profile data.                                   |

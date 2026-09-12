@@ -4,5 +4,14 @@ import nextTs from 'eslint-config-next/typescript';
 export default defineConfig([
   ...nextVitals,
   ...nextTs,
-  globalIgnores(['.next/**', 'out/**', 'node_modules/**', 'coverage/**', 'next-env.d.ts']),
+  globalIgnores([
+    '.next/**',
+    'out/**',
+    '.pages-build/**',
+    'out-pages/**',
+    'artifacts/**',
+    'node_modules/**',
+    'coverage/**',
+    'next-env.d.ts',
+  ]),
 ]);

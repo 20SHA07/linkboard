@@ -3,6 +3,7 @@
 import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js';
 import type { Account, ClickEvent, Profile, SocialLink, Theme } from './types';
 import { validateEmail, validateProfile, validateUsername } from './validation';
+import { appPath, isStaticExport } from './urls';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || '';
 const supabaseKey =
@@ -11,13 +12,13 @@ const supabaseKey =
   '';
 
 /** Self-hosted installations use the real server API; configured sites use Supabase. */
-export const usesSupabase = Boolean(supabaseUrl || supabaseKey);
+export const usesSupabase = isStaticExport || Boolean(supabaseUrl || supabaseKey);
 let client: SupabaseClient | undefined;
 
 async function api<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(path, {
+    response = await fetch(appPath(path), {
       method,
       credentials: 'same-origin',
       cache: 'no-store',
@@ -161,7 +162,8 @@ export async function signUp(
     return { confirmationRequired: result.confirmationRequired };
   }
   // Supabase returns the confirmed session to the same app.
-  const redirect = typeof window !== 'undefined' ? `${window.location.origin}/` : undefined;
+  const redirect =
+    typeof window !== 'undefined' ? `${window.location.origin}${appPath('/')}` : undefined;
   const { data, error } = await getClient().auth.signUp({
     email: email.trim(),
     password,
