@@ -1,0 +1,17 @@
+{
+  "name": "linkboard",
+  "version": "1.2.0",
+  "private": true,
+  "type": "module",
+  "description": "A self-hosted link-in-bio workspace with a QMC starter page.",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "start": "node src/local.mjs",
+    "test": "node --test test/*.test.mjs",
+    "owner-key": "node scripts/owner-key.mjs",
+    "deploy": "node scripts/deploy.mjs",
+    "demo": "node scripts/build-preview.mjs"
+  }
+}
