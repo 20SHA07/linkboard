@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { testProfile } from './fixtures';
 
 const backend = vi.hoisted(() => ({
   createClient: vi.fn(),
@@ -42,15 +43,15 @@ async function configuredData() {
 }
 
 describe('configuration and authentication boundaries', () => {
-  it('makes unconfigured mode a demo and refuses to create pretend accounts', async () => {
+  it('uses real server sessions by default without requiring a hosted backend', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ account: null }));
+    vi.stubGlobal('fetch', fetchMock);
     const data = await import('../lib/data');
-    expect(data.isDemo).toBe(true);
+    expect(data.usesSupabase).toBe(false);
     expect(await data.getCurrentUser()).toBeNull();
-    await expect(data.signUp('jane@example.com', 'long-example-password')).rejects.toThrow(
-      /Connect Supabase/,
-    );
-    await expect(data.signIn('jane@example.com', 'long-example-password')).rejects.toThrow(
-      /Connect Supabase/,
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/auth/session',
+      expect.objectContaining({ credentials: 'same-origin', cache: 'no-store' }),
     );
     expect(backend.createClient).not.toHaveBeenCalled();
   });
@@ -64,19 +65,19 @@ describe('configuration and authentication boundaries', () => {
       if (mode === 'publishable-key-only')
         vi.stubEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', 'public-key');
       const data = await import('../lib/data');
-      expect(data.isDemo).toBe(false);
+      expect(data.usesSupabase).toBe(true);
       await expect(data.getCurrentUser()).rejects.toThrow(/not fully configured/i);
       expect(backend.createClient).not.toHaveBeenCalled();
     },
   );
 
-  it('surfaces auth outages instead of falling back to local demo data', async () => {
+  it('surfaces auth outages instead of switching to another backend', async () => {
     const data = await configuredData();
     backend.getUser.mockResolvedValue({
       data: { user: null },
       error: { name: 'AuthRetryableFetchError', message: 'Auth service unavailable' },
     });
-    expect(data.isDemo).toBe(false);
+    expect(data.usesSupabase).toBe(true);
     await expect(data.loadDashboard()).rejects.toThrow('Auth service unavailable');
     expect(backend.from).not.toHaveBeenCalled();
   });
@@ -104,12 +105,12 @@ describe('configuration and authentication boundaries', () => {
 
   it('blocks another profile owner from being passed to save', async () => {
     const data = await configuredData();
-    const { demoProfile } = await import('../lib/demo');
+    const { testProfile } = await import('./fixtures');
     backend.getUser.mockResolvedValue({
       data: { user: { id: 'owner-b', email: 'b@example.com' } },
       error: null,
     });
-    await expect(data.saveProfile(demoProfile)).rejects.toThrow(/account that owns/);
+    await expect(data.saveProfile(testProfile)).rejects.toThrow(/account that owns/);
     expect(backend.from).not.toHaveBeenCalled();
   });
 
@@ -155,6 +156,242 @@ describe('configuration and authentication boundaries', () => {
   });
 });
 
+describe('built-in server API', () => {
+  beforeEach(() => {
+    // Keep account-change messages inside this test process; no browser or storage is used.
+    vi.stubGlobal('BroadcastChannel', undefined);
+  });
+
+  it('creates an account, signs in, and signs out through the cookie-authenticated API', async () => {
+    const dispatchEvent = vi.fn();
+    vi.stubGlobal('window', { dispatchEvent });
+    const account = { id: testProfile.id, email: 'owner@example.com' };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({ account, confirmationRequired: false }, { status: 201 }),
+      )
+      .mockResolvedValueOnce(Response.json({ account }))
+      .mockResolvedValueOnce(Response.json({ account }))
+      .mockResolvedValueOnce(Response.json({ ok: true }));
+    vi.stubGlobal('fetch', fetchMock);
+    const data = await import('../lib/data');
+
+    expect(await data.signUp(' owner@example.com ', 'a-long-test-password')).toEqual({
+      confirmationRequired: false,
+    });
+    await data.signIn(' owner@example.com ', 'a-long-test-password');
+    expect(await data.getCurrentUser()).toEqual(account);
+    await data.signOut();
+
+    expect(
+      fetchMock.mock.calls.map(([path, options]) => [path, options.method, options.body]),
+    ).toEqual([
+      [
+        '/api/auth/signup',
+        'POST',
+        JSON.stringify({ email: 'owner@example.com', password: 'a-long-test-password' }),
+      ],
+      [
+        '/api/auth/signin',
+        'POST',
+        JSON.stringify({ email: 'owner@example.com', password: 'a-long-test-password' }),
+      ],
+      ['/api/auth/session', 'GET', undefined],
+      ['/api/auth/signout', 'POST', '{}'],
+    ]);
+    for (const [, options] of fetchMock.mock.calls) {
+      expect(options).toMatchObject({ credentials: 'same-origin', cache: 'no-store' });
+      expect(options.headers).toMatchObject({ Accept: 'application/json' });
+      expect(options.headers).not.toHaveProperty('Authorization');
+      if (options.body) expect(options.headers['Content-Type']).toBe('application/json');
+      expect(options.signal).toBeInstanceOf(AbortSignal);
+    }
+    expect(dispatchEvent.mock.calls.map(([event]) => event.type)).toEqual([
+      'linkboard:auth',
+      'linkboard:auth',
+      'linkboard:auth',
+    ]);
+    expect(backend.createClient).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid credentials before contacting the built-in server', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const data = await import('../lib/data');
+    await expect(data.signUp('invalid', 'a-long-test-password')).rejects.toThrow(/email/i);
+    await expect(data.signUp('owner@example.com', 'short')).rejects.toThrow(/12/);
+    await expect(data.signIn('owner@example.com', '')).rejects.toThrow(/password/i);
+    await expect(data.signIn('owner@example.com', 'x'.repeat(129))).rejects.toThrow(/password/i);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('loads the signed-in owner’s persisted profile and server timestamps', async () => {
+    const events = [{ id: 'click-one', linkId: 'website', timestamp: '2026-09-12T08:30:00.000Z' }];
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ profile: testProfile, events }));
+    vi.stubGlobal('fetch', fetchMock);
+    const data = await import('../lib/data');
+    expect(await data.loadDashboard(testProfile.id)).toEqual({ profile: testProfile, events });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/dashboard',
+      expect.objectContaining({
+        method: 'GET',
+        credentials: 'same-origin',
+        cache: 'no-store',
+      }),
+    );
+    expect(backend.from).not.toHaveBeenCalled();
+  });
+
+  it('rejects a dashboard response from a different account after a session change', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(Response.json({ profile: testProfile, events: [] })),
+    );
+    const data = await import('../lib/data');
+    await expect(data.loadDashboard('another-owner')).rejects.toThrow(/account changed/i);
+  });
+
+  it('sends profile changes as a validated PUT and preserves owner authorization errors', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ ok: true }))
+      .mockResolvedValueOnce(
+        Response.json({ error: 'You can only change your own profile.' }, { status: 403 }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+    const data = await import('../lib/data');
+    await data.saveProfile(testProfile);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/profile',
+      expect.objectContaining({
+        method: 'PUT',
+        credentials: 'same-origin',
+        cache: 'no-store',
+        body: JSON.stringify(testProfile),
+      }),
+    );
+    await expect(data.saveProfile({ ...testProfile, id: 'another-owner' })).rejects.toThrow(
+      /own profile/,
+    );
+    await expect(data.saveProfile({ ...testProfile, username: '../admin' })).rejects.toThrow(
+      /username/i,
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('fetches public profiles without turning a missing profile into seeded content', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ profile: testProfile }))
+      .mockResolvedValueOnce(Response.json({ profile: null }));
+    vi.stubGlobal('fetch', fetchMock);
+    const data = await import('../lib/data');
+    expect(await data.getPublicProfile(testProfile.username)).toEqual(testProfile);
+    expect(await data.getPublicProfile('unpublished-owner')).toBeNull();
+    expect(await data.getPublicProfile('../admin')).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/public/test-owner',
+      expect.objectContaining({
+        method: 'GET',
+        credentials: 'same-origin',
+        cache: 'no-store',
+      }),
+    );
+  });
+
+  it('submits only valid click identifiers and suppresses immediate duplicate clicks', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(() => Promise.resolve(Response.json({ ok: true })));
+    vi.stubGlobal('fetch', fetchMock);
+    const data = await import('../lib/data');
+    await data.trackClick('not-a-profile-id', 'website');
+    await data.trackClick(testProfile.id, '../invalid');
+    expect(fetchMock).not.toHaveBeenCalled();
+    await data.trackClick(testProfile.id, 'website');
+    await data.trackClick(testProfile.id, 'website');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/click',
+      expect.objectContaining({
+        method: 'POST',
+        credentials: 'same-origin',
+        cache: 'no-store',
+        body: JSON.stringify({ profileId: testProfile.id, linkId: 'website' }),
+      }),
+    );
+    expect(backend.rpc).not.toHaveBeenCalled();
+  });
+
+  it('rejects failed click recording rather than claiming the event was saved', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue(
+          Response.json({ error: 'This link is not available.' }, { status: 404 }),
+        ),
+    );
+    const data = await import('../lib/data');
+    await expect(data.trackClick(testProfile.id, 'website')).rejects.toThrow(/not available/);
+  });
+
+  it('announces expired authentication and preserves the server’s actionable error', async () => {
+    const dispatchEvent = vi.fn();
+    vi.stubGlobal('window', { dispatchEvent });
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue(
+          Response.json({ error: 'Sign in to access your dashboard.' }, { status: 401 }),
+        ),
+    );
+    const data = await import('../lib/data');
+    await expect(data.loadDashboard()).rejects.toThrow('Sign in to access your dashboard.');
+    expect(dispatchEvent).toHaveBeenCalledTimes(1);
+    expect(dispatchEvent.mock.calls[0][0].type).toBe('linkboard:auth');
+    expect(backend.createClient).not.toHaveBeenCalled();
+  });
+
+  it.each(['<html>Gateway failure</html>', 'null', '42', '"unexpected"'])(
+    'rejects malformed successful API output: %s',
+    async (body) => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(body, { status: 200 })));
+      const data = await import('../lib/data');
+      await expect(data.getCurrentUser()).rejects.toThrow(/unexpected response/i);
+      expect(backend.createClient).not.toHaveBeenCalled();
+    },
+  );
+
+  it('uses a readable fallback for an HTML server error without reflecting its body', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue(new Response('<html>Internal gateway details</html>', { status: 502 })),
+    );
+    const data = await import('../lib/data');
+    await expect(data.getPublicProfile('test-owner')).rejects.toThrow(
+      'The request could not be completed. Please try again.',
+    );
+  });
+
+  it('surfaces network failure without creating a fallback session or switching providers', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Internal connection details')));
+    const data = await import('../lib/data');
+    await expect(data.getCurrentUser()).rejects.toThrow(/server couldn’t be reached/i);
+    await expect(data.signUp('owner@example.com', 'a-long-test-password')).rejects.toThrow(
+      /server couldn’t be reached/i,
+    );
+    expect(backend.createClient).not.toHaveBeenCalled();
+  });
+});
+
 describe('public profile access', () => {
   it('uses the restricted public RPC and preserves unavailable-profile state', async () => {
     const data = await configuredData();
@@ -180,27 +417,21 @@ describe('public profile access', () => {
 describe('profile persistence', () => {
   it('normalizes international hostnames before sending them to database validation', async () => {
     const data = await configuredData();
-    const { demoProfile } = await import('../lib/demo');
+    const { testProfile } = await import('./fixtures');
     backend.getUser.mockResolvedValue({
-      data: { user: { id: demoProfile.id, email: 'jane@example.com' } },
+      data: { user: { id: testProfile.id, email: 'jane@example.com' } },
       error: null,
     });
-    const saved = structuredClone(demoProfile);
+    const saved = structuredClone(testProfile);
     saved.avatarUrl = 'https://例え.テスト/avatar.png';
     saved.links[0].url = 'https://例え.テスト/work';
-    const update = vi
-      .fn()
-      .mockReturnValue({
-        eq: vi
-          .fn()
-          .mockReturnValue({
-            select: vi
-              .fn()
-              .mockReturnValue({
-                single: vi.fn().mockResolvedValue({ data: { id: saved.id }, error: null }),
-              }),
-          }),
-      });
+    const update = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          single: vi.fn().mockResolvedValue({ data: { id: saved.id }, error: null }),
+        }),
+      }),
+    });
     backend.from.mockReturnValue({ update });
     await data.saveProfile(saved);
     const payload = update.mock.calls[0][0];
@@ -210,26 +441,20 @@ describe('profile persistence', () => {
 
   it('rejects an update that affects no row rather than claiming it was saved', async () => {
     const data = await configuredData();
-    const { demoProfile } = await import('../lib/demo');
+    const { testProfile } = await import('./fixtures');
     backend.getUser.mockResolvedValue({
-      data: { user: { id: demoProfile.id, email: 'jane@example.com' } },
+      data: { user: { id: testProfile.id, email: 'jane@example.com' } },
       error: null,
     });
     backend.from.mockReturnValue({
-      update: vi
-        .fn()
-        .mockReturnValue({
-          eq: vi
-            .fn()
-            .mockReturnValue({
-              select: vi
-                .fn()
-                .mockReturnValue({
-                  single: vi.fn().mockResolvedValue({ data: null, error: null }),
-                }),
-            }),
+      update: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          select: vi.fn().mockReturnValue({
+            single: vi.fn().mockResolvedValue({ data: null, error: null }),
+          }),
         }),
+      }),
     });
-    await expect(data.saveProfile(demoProfile)).rejects.toThrow(/not saved/i);
+    await expect(data.saveProfile(testProfile)).rejects.toThrow(/not saved/i);
   });
 });

@@ -1,6 +1,11 @@
 import type { NextConfig } from 'next';
 const nextConfig: NextConfig = {
-  output: 'standalone',
+  // Docker runs the standalone server; ordinary Node installs use `next start`.
+  output: process.env.LINKBOARD_STANDALONE === '1' ? 'standalone' : undefined,
+  // Runtime databases and local artifacts must never enter deployment bundles.
+  outputFileTracingExcludes: {
+    '/*': ['./data/**/*', './artifacts/**/*', './.npm-cache/**/*', './**/*.sqlite*', './**/*.db*'],
+  },
   poweredByHeader: false,
   devIndicators: false,
   async headers() {

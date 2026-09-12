@@ -2,8 +2,8 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, ArrowRight, Loader2 } from 'lucide-react';
-import { getCurrentUser, isDemo, signIn, signUp } from '@/lib/data';
+import { ArrowRight, Loader2 } from 'lucide-react';
+import { getCurrentUser, signIn, signUp } from '@/lib/data';
 import { validateEmail } from '@/lib/validation';
 
 export default function Login() {
@@ -11,23 +11,42 @@ export default function Login() {
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [checkingSession, setCheckingSession] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   useEffect(() => {
-    if (!isDemo)
-      void getCurrentUser()
-        .then((user) => {
-          if (user) router.replace('/');
-        })
-        .catch(() => {});
+    let active = true;
+    void getCurrentUser()
+      .then((user) => {
+        if (active && user) router.replace('/');
+      })
+      .catch((cause: unknown) => {
+        if (active)
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : 'We couldn’t check your session. Please try signing in again.',
+          );
+      })
+      .finally(() => {
+        if (active) setCheckingSession(false);
+      });
+    return () => {
+      active = false;
+    };
   }, [router]);
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (busy || checkingSession) return;
     setError('');
     setMessage('');
     if (!validateEmail(email.trim())) {
       setError('Please enter a valid email address.');
+      return;
+    }
+    if (!password || password.length > 128) {
+      setError('Enter your password, up to 128 characters.');
       return;
     }
     if (mode === 'signup' && (password.length < 12 || password.length > 128)) {
@@ -50,7 +69,9 @@ export default function Login() {
         } else router.replace('/');
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'We couldn’t sign you in. Please try again.');
+      setError(
+        e instanceof Error ? e.message : 'We couldn’t complete your request. Please try again.',
+      );
     } finally {
       setBusy(false);
     }
@@ -59,7 +80,7 @@ export default function Login() {
     <div className="auth-shell">
       <aside className="auth-story">
         <Link href="/" className="brand">
-          linkboard<span>✳</span>
+          linkboard<span aria-hidden="true">✳</span>
         </Link>
         <div className="auth-story-content">
           <span className="eyebrow">YOUR OWN LITTLE CORNER</span>
@@ -76,102 +97,102 @@ export default function Login() {
         <span className="auth-story-footer">Your links. Your style. Your corner.</span>
       </aside>
       <main className="auth-main">
-        <Link href="/" className="auth-back">
-          <ArrowLeft size={13} />
-          Back to your board
-        </Link>
-        <form className="auth-form" onSubmit={submit}>
+        <form className="auth-form" onSubmit={submit} aria-labelledby="auth-heading">
           <span className="eyebrow">MAKE YOURSELF AT HOME</span>
-          <h2>{mode === 'signin' ? 'Good to have you here.' : 'A space of your own.'}</h2>
+          <h2 id="auth-heading">
+            {mode === 'signin' ? 'Good to have you here.' : 'A space of your own.'}
+          </h2>
           <p>
             {mode === 'signin'
               ? 'Sign in and pick up where you left off.'
               : 'Create an account. Bring your world together.'}
           </p>
-          {isDemo ? (
-            <>
-              <div className="auth-demo-notice">
-                <strong>You’re exploring the local demo.</strong>
-                <p>
-                  To enable secure accounts, connect a free Supabase project using the setup
-                  instructions in this project’s README. Add your environment variables, then
-                  restart the app.
-                </p>
-                <p>Your demo works right now, with changes saved in this browser.</p>
-              </div>
-              <Link className="button primary full-width" href="/">
-                Explore your demo
-                <ArrowRight size={16} />
-              </Link>
-            </>
-          ) : (
-            <>
-              <label>
-                Email address
-                <input
-                  type="email"
-                  required
-                  maxLength={254}
-                  autoComplete="email"
-                  placeholder="you@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </label>
-              <label>
-                Password
-                <input
-                  type="password"
-                  required
-                  maxLength={128}
-                  minLength={mode === 'signup' ? 12 : undefined}
-                  autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
-                  placeholder={mode === 'signup' ? 'At least 12 characters' : 'Your password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-                {mode === 'signup' && (
-                  <span className="field-help">
-                    Choose a unique password with at least 12 characters.
-                  </span>
-                )}
-              </label>
-              {error && (
-                <div className="alert error" role="alert">
-                  {error}
-                </div>
-              )}
-              {message && (
-                <div className="auth-demo-notice" role="status">
-                  {message}
-                </div>
-              )}
-              <button className="button primary full-width" disabled={busy} type="submit">
-                {busy ? (
-                  <Loader2 className="spin" size={16} />
-                ) : (
-                  <>
-                    {mode === 'signin' ? 'Sign in to your space' : 'Create your account'}
-                    <ArrowRight size={16} />
-                  </>
-                )}
-              </button>
-              <div className="auth-toggle">
-                {mode === 'signin' ? 'New around here?' : 'Already have a space?'}
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => {
-                    setMode((m) => (m === 'signin' ? 'signup' : 'signin'));
-                    setError('');
-                    setMessage('');
-                  }}
-                >
-                  {mode === 'signin' ? 'Create an account' : 'Sign in'}
-                </button>
-              </div>
-            </>
+          <label htmlFor="auth-email">
+            Email address
+            <input
+              id="auth-email"
+              name="email"
+              type="email"
+              required
+              maxLength={254}
+              autoComplete="email"
+              autoCapitalize="none"
+              spellCheck={false}
+              disabled={busy}
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </label>
+          <label htmlFor="auth-password">
+            Password
+            <input
+              id="auth-password"
+              name="password"
+              type="password"
+              required
+              maxLength={128}
+              minLength={mode === 'signup' ? 12 : undefined}
+              autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+              aria-describedby={mode === 'signup' ? 'password-help' : undefined}
+              disabled={busy}
+              placeholder={mode === 'signup' ? 'At least 12 characters' : 'Your password'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            {mode === 'signup' && (
+              <span className="field-help" id="password-help">
+                Choose a unique password with at least 12 characters.
+              </span>
+            )}
+          </label>
+          {error && (
+            <div className="alert error" role="alert">
+              {error}
+            </div>
           )}
+          {message && (
+            <div className="auth-notice" role="status">
+              {message}
+            </div>
+          )}
+          <button
+            className="button primary full-width"
+            disabled={busy || checkingSession}
+            type="submit"
+            aria-busy={busy || checkingSession}
+          >
+            {busy || checkingSession ? (
+              <>
+                <Loader2 className="spin" size={16} aria-hidden="true" />
+                {checkingSession
+                  ? 'Checking your session…'
+                  : mode === 'signup'
+                    ? 'Creating your account…'
+                    : 'Signing you in…'}
+              </>
+            ) : (
+              <>
+                {mode === 'signin' ? 'Sign in to your space' : 'Create your account'}
+                <ArrowRight size={16} aria-hidden="true" />
+              </>
+            )}
+          </button>
+          <div className="auth-toggle">
+            {mode === 'signin' ? 'New around here?' : 'Already have a space?'}
+            <button
+              type="button"
+              disabled={busy || checkingSession}
+              onClick={() => {
+                setMode((m) => (m === 'signin' ? 'signup' : 'signin'));
+                setPassword('');
+                setError('');
+                setMessage('');
+              }}
+            >
+              {mode === 'signin' ? 'Create an account' : 'Sign in'}
+            </button>
+          </div>
           <div className="auth-divider">A HOME FOR EVERYTHING YOU DO</div>
         </form>
       </main>

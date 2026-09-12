@@ -30,15 +30,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import {
-  getCurrentUser,
-  getPersistenceWarning,
-  isDemo,
-  loadDashboard,
-  saveProfile,
-  signOut,
-  subscribeAuth,
-} from '@/lib/data';
+import { getCurrentUser, loadDashboard, saveProfile, signOut, subscribeAuth } from '@/lib/data';
 import { validateProfile } from '@/lib/validation';
 import type { Account, ClickEvent, Platform, Profile, Theme } from '@/lib/types';
 import ProfileCard from './profile-card';
@@ -111,6 +103,7 @@ export default function Dashboard() {
   const [error, setError] = useState('');
   const [origin, setOrigin] = useState('');
   const [shareOpen, setShareOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
   const [newLink, setNewLink] = useState({ title: '', url: '', platform: 'website' as Platform });
@@ -128,7 +121,7 @@ export default function Dashboard() {
     try {
       const user = await getCurrentUser();
       if (sequence !== loadSequence.current) return;
-      if (!isDemo && !user) {
+      if (!user) {
         router.replace('/login');
         return;
       }
@@ -157,24 +150,28 @@ export default function Dashboard() {
     }
   }, [router]);
   useEffect(() => {
-    // This initializes browser-only auth and storage; state changes follow awaited I/O.
+    // Load the authenticated account and its saved server data after awaited I/O.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void initialize();
     let deferred: ReturnType<typeof setTimeout> | undefined;
     let unsubscribe = () => {};
     try {
       unsubscribe = subscribeAuth((user) => {
-        if (!isDemo && !user) {
+        if (!user) {
           ++loadSequence.current;
           setProfile(null);
           setSavedProfile(null);
           setEvents([]);
+          setSaving(false);
+          setRefreshing(false);
           router.replace('/login');
         } else if (user && loadedAccount.current && user.id !== loadedAccount.current) {
           ++loadSequence.current;
           setProfile(null);
           setSavedProfile(null);
           setEvents([]);
+          setSaving(false);
+          setRefreshing(false);
           setLoading(true);
           // Supabase auth callbacks must release their lock before calling auth again.
           deferred = setTimeout(() => void initialize(), 0);
@@ -206,9 +203,9 @@ export default function Dashboard() {
     return () => window.removeEventListener('beforeunload', warn);
   }, [dirty]);
   useEffect(() => {
-    if (shareOpen || addOpen) dialogRef.current?.showModal();
+    if (shareOpen || addOpen || previewOpen) dialogRef.current?.showModal();
     else dialogRef.current?.close();
-  }, [shareOpen, addOpen]);
+  }, [shareOpen, addOpen, previewOpen]);
   useEffect(() => {
     const close = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setMobileNav(false);
@@ -229,32 +226,35 @@ export default function Dashboard() {
       return;
     }
     const snapshot = structuredClone(profile);
+    const sequence = loadSequence.current;
     setSaving(true);
     setError('');
     try {
       await saveProfile(snapshot);
+      if (sequence !== loadSequence.current) return;
       setSavedProfile(snapshot);
-      setToast(
-        getPersistenceWarning() ||
-          (isDemo ? 'Changes saved in this browser.' : 'Your changes are live.'),
-      );
+      setToast(snapshot.published ? 'Your changes are live.' : 'Your private profile is saved.');
     } catch (e) {
+      if (sequence !== loadSequence.current) return;
       setError(e instanceof Error ? e.message : 'Changes couldn’t be saved. Please try again.');
     } finally {
-      setSaving(false);
+      if (sequence === loadSequence.current) setSaving(false);
     }
   }
   async function refreshAnalytics() {
+    const sequence = loadSequence.current;
     setRefreshing(true);
     try {
       const result = await loadDashboard(account?.id);
+      if (sequence !== loadSequence.current) return;
       setEvents(result.events);
       setAnalyticsNow(Date.now());
       setToast('Analytics are up to date.');
     } catch (e) {
+      if (sequence !== loadSequence.current) return;
       setError(e instanceof Error ? e.message : 'Couldn’t refresh analytics.');
     } finally {
-      setRefreshing(false);
+      if (sequence === loadSequence.current) setRefreshing(false);
     }
   }
   const pageUrl =
@@ -425,7 +425,7 @@ export default function Dashboard() {
           </button>
           <a
             className="nav-item"
-            href="https://github.com/supabase/supabase#readme"
+            href="https://github.com/20SHA07/linkboard/tree/codex/nextjs-linkboard#readme"
             target="_blank"
             rel="noopener noreferrer"
           >
@@ -437,13 +437,16 @@ export default function Dashboard() {
             <Avatar profile={profile} size="small" />
             <div>
               <strong>{profile.name}</strong>
-              <small>{isDemo ? 'Local demo workspace' : account?.email}</small>
+              <small>{account?.email}</small>
             </div>
-            {!isDemo && (
-              <button className="icon-button" onClick={() => void logOut()} title="Sign out">
-                <LogOut size={17} />
-              </button>
-            )}
+            <button
+              className="icon-button"
+              onClick={() => void logOut()}
+              title="Sign out"
+              aria-label="Sign out"
+            >
+              <LogOut size={17} />
+            </button>
           </div>
         </div>
       </aside>
@@ -464,15 +467,26 @@ export default function Dashboard() {
             <strong>{activeTab}</strong>
           </div>
           <div className="topbar-actions">
-            <a
-              className="button secondary view-page"
-              href={pageUrl || '#'}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <ExternalLink size={15} />
-              View page
-            </a>
+            {savedProfile?.published ? (
+              <a
+                className="button secondary view-page"
+                href={pageUrl || '#'}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <ExternalLink size={15} />
+                View page
+              </a>
+            ) : (
+              <button
+                className="button secondary view-page"
+                onClick={() => setPreviewOpen(true)}
+                aria-label="Preview your page"
+              >
+                <Eye size={15} />
+                Preview page
+              </button>
+            )}
             <button
               className="button primary save-button"
               onClick={() => void save()}
@@ -516,13 +530,13 @@ export default function Dashboard() {
                         : 'Introduce yourself and make your page your own.'}
               </p>
             </div>
-            {isDemo && (
-              <div className="demo-banner">
+            {!savedProfile?.published && (
+              <div className="draft-banner">
                 <span className="status-dot" />
-                <span>You’re in the demo. Changes are saved to this browser.</span>
-                <Link href="/login">
-                  Set up account <ArrowUpRight size={12} />
-                </Link>
+                <span>Your page is private until you publish it.</span>
+                <button onClick={() => setTab('settings')}>
+                  Publishing settings <ArrowUpRight size={12} />
+                </button>
               </div>
             )}
             {error && (
@@ -544,7 +558,9 @@ export default function Dashboard() {
                   <div className="profile-summary-info">
                     <div className="summary-name">
                       {profile.name}
-                      <span className="personal-badge">Your page</span>
+                      <span className="personal-badge">
+                        {savedProfile?.published ? 'Published' : 'Private'}
+                      </span>
                     </div>
                     <p>{profile.bio.split('\n')[0] || 'A little introduction goes a long way.'}</p>
                     <button className="profile-url" onClick={() => void copyUrl()}>
@@ -788,11 +804,7 @@ export default function Dashboard() {
                 <div className="section-heading">
                   <div>
                     <h2>Your page at a glance</h2>
-                    <p>
-                      {isDemo
-                        ? 'Real clicks from your public page in this browser.'
-                        : 'Clicks across all browsers, stored securely for your account.'}
-                    </p>
+                    <p>Clicks across all browsers, stored securely for your account.</p>
                   </div>
                   <button
                     className="button small-button"
@@ -909,11 +921,8 @@ export default function Dashboard() {
                   })}
                 </div>
                 <p className="field-help">
-                  Click totals count interactions, not unique visitors. No cookies or visitor
-                  identities are collected.{' '}
-                  {isDemo
-                    ? 'Demo history keeps the most recent 10,000 clicks.'
-                    : 'Saved events are loaded across all pages of your history.'}
+                  Click totals count interactions, not unique visitors. Analytics doesn’t store
+                  visitor identities or use tracking cookies.
                 </p>
               </section>
             )}
@@ -1117,14 +1126,18 @@ export default function Dashboard() {
         onCancel={() => {
           setAddOpen(false);
           setShareOpen(false);
+          setPreviewOpen(false);
         }}
         onClick={(e) => {
           if (e.target === e.currentTarget) {
             setAddOpen(false);
             setShareOpen(false);
+            setPreviewOpen(false);
           }
         }}
-        aria-label={addOpen ? 'Add a new link' : 'Share your page'}
+        aria-label={
+          addOpen ? 'Add a new link' : previewOpen ? 'Preview your page' : 'Share your page'
+        }
       >
         <button
           className="icon-button modal-close"
@@ -1132,6 +1145,7 @@ export default function Dashboard() {
           onClick={() => {
             setAddOpen(false);
             setShareOpen(false);
+            setPreviewOpen(false);
           }}
         >
           <X size={20} />
@@ -1189,6 +1203,8 @@ export default function Dashboard() {
               Add to your page
             </button>
           </form>
+        ) : previewOpen ? (
+          <ProfileCard profile={profile} showBrand={false} />
         ) : shareOpen ? (
           <div className="share-modal">
             <span className="eyebrow">GOOD THINGS ARE MEANT TO BE SHARED</span>
@@ -1211,10 +1227,9 @@ export default function Dashboard() {
               Open your page
               <ArrowUpRight size={14} />
             </a>
-            {isDemo && (
+            {!savedProfile?.published && (
               <p className="field-help">
-                Demo profiles are only available in this browser. Connect Supabase and deploy to
-                share with everyone.
+                Your page is private. Publish it in Settings before sharing this code.
               </p>
             )}
           </div>

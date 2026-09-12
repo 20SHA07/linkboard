@@ -2,13 +2,6 @@
 
 import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js';
 import type { Account, ClickEvent, Profile, SocialLink, Theme } from './types';
-import {
-  getDemoStorageWarning,
-  loadDemoEvents,
-  loadDemoProfile,
-  recordDemoClick,
-  saveDemoProfile,
-} from './demo';
 import { validateEmail, validateProfile, validateUsername } from './validation';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || '';
@@ -17,9 +10,50 @@ const supabaseKey =
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ||
   '';
 
-/** Missing configuration runs an explicitly labelled, browser-local demo. */
-export const isDemo = !supabaseUrl && !supabaseKey;
+/** Self-hosted installations use the real server API; configured sites use Supabase. */
+export const usesSupabase = Boolean(supabaseUrl || supabaseKey);
 let client: SupabaseClient | undefined;
+
+async function api<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      method,
+      credentials: 'same-origin',
+      cache: 'no-store',
+      headers: {
+        Accept: 'application/json',
+        ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      signal: AbortSignal.timeout(20_000),
+    });
+  } catch {
+    throw new Error('The server couldn’t be reached. Check your connection and try again.');
+  }
+  const result = await response.json().catch(() => null);
+  if (!response.ok) {
+    if (response.status === 401) announceAuthChange();
+    throw new Error(
+      typeof result?.error === 'string'
+        ? result.error
+        : 'The request could not be completed. Please try again.',
+    );
+  }
+  if (!result || typeof result !== 'object')
+    throw new Error('The server returned an unexpected response. Please try again.');
+  return result as T;
+}
+
+function announceAuthChange() {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent?.(new Event('linkboard:auth'));
+  if (typeof BroadcastChannel !== 'undefined') {
+    const channel = new BroadcastChannel('linkboard:auth');
+    channel.postMessage('changed');
+    channel.close();
+  }
+}
 
 function getClient(): SupabaseClient {
   if (!supabaseUrl || !supabaseKey)
@@ -55,7 +89,7 @@ function readableError(error: { message?: string; code?: string } | null, fallba
 }
 
 export async function getCurrentUser(): Promise<Account | null> {
-  if (isDemo) return null;
+  if (!usesSupabase) return (await api<{ account: Account | null }>('/api/auth/session')).account;
   const { data, error } = await getClient().auth.getUser();
   if (error && error.name !== 'AuthSessionMissingError')
     throw readableError(error, 'Could not check your session. Please try again.');
@@ -63,7 +97,34 @@ export async function getCurrentUser(): Promise<Account | null> {
 }
 
 export function subscribeAuth(callback: (account: Account | null) => void): () => void {
-  if (isDemo) return () => {};
+  if (!usesSupabase) {
+    let active = true;
+    let sequence = 0;
+    const check = () => {
+      const current = ++sequence;
+      void getCurrentUser()
+        .then((account) => {
+          if (active && current === sequence) callback(account);
+        })
+        .catch(() => {});
+    };
+    const visible = () => {
+      if (document.visibilityState === 'visible') check();
+    };
+    const channel =
+      typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('linkboard:auth') : null;
+    if (channel) channel.onmessage = check;
+    window.addEventListener('linkboard:auth', check);
+    window.addEventListener('focus', check);
+    document.addEventListener('visibilitychange', visible);
+    return () => {
+      active = false;
+      channel?.close();
+      window.removeEventListener('linkboard:auth', check);
+      window.removeEventListener('focus', check);
+      document.removeEventListener('visibilitychange', visible);
+    };
+  }
   const { data } = getClient().auth.onAuthStateChange((_event, session) => {
     // Keep this callback synchronous; awaiting Supabase calls here can deadlock.
     callback(accountFromUser(session?.user ?? null));
@@ -72,12 +133,14 @@ export function subscribeAuth(callback: (account: Account | null) => void): () =
 }
 
 export async function signIn(email: string, password: string): Promise<void> {
-  if (isDemo)
-    throw new Error(
-      'Connect Supabase to sign in. The demo does not create or authenticate user accounts.',
-    );
   if (!validateEmail(email.trim())) throw new Error('Enter a valid email address.');
-  if (!password) throw new Error('Enter your password.');
+  if (!password || password.length > 128)
+    throw new Error('Enter your password (up to 128 characters).');
+  if (!usesSupabase) {
+    await api('/api/auth/signin', 'POST', { email: email.trim(), password });
+    announceAuthChange();
+    return;
+  }
   const { error } = await getClient().auth.signInWithPassword({ email: email.trim(), password });
   if (error) throw readableError(error, 'Sign-in failed. Please try again.');
 }
@@ -86,18 +149,19 @@ export async function signUp(
   email: string,
   password: string,
 ): Promise<{ confirmationRequired: boolean }> {
-  if (isDemo)
-    throw new Error(
-      'Connect Supabase to create separate, secure user accounts. The demo is stored in this browser only.',
-    );
   if (!validateEmail(email.trim())) throw new Error('Enter a valid email address.');
   if (password.length < 12 || password.length > 128)
     throw new Error('Use a password with 12–128 characters.');
-  // Static-host friendly: Supabase returns the confirmed session to the same app.
-  const redirect =
-    typeof window !== 'undefined'
-      ? `${window.location.origin}${process.env.NEXT_PUBLIC_BASE_PATH || ''}/`
-      : undefined;
+  if (!usesSupabase) {
+    const result = await api<{ confirmationRequired: boolean }>('/api/auth/signup', 'POST', {
+      email: email.trim(),
+      password,
+    });
+    announceAuthChange();
+    return { confirmationRequired: result.confirmationRequired };
+  }
+  // Supabase returns the confirmed session to the same app.
+  const redirect = typeof window !== 'undefined' ? `${window.location.origin}/` : undefined;
   const { data, error } = await getClient().auth.signUp({
     email: email.trim(),
     password,
@@ -108,7 +172,11 @@ export async function signUp(
 }
 
 export async function signOut(): Promise<void> {
-  if (isDemo) return;
+  if (!usesSupabase) {
+    await api('/api/auth/signout', 'POST', {});
+    announceAuthChange();
+    return;
+  }
   const { error } = await getClient().auth.signOut();
   if (error) throw readableError(error, 'Could not sign out. Please try again.');
 }
@@ -148,7 +216,12 @@ function fromRow(row: ProfileRow): Profile {
 export async function loadDashboard(
   userId?: string,
 ): Promise<{ profile: Profile; events: ClickEvent[] }> {
-  if (isDemo) return { profile: loadDemoProfile(), events: loadDemoEvents() };
+  if (!usesSupabase) {
+    const result = await api<{ profile: Profile; events: ClickEvent[] }>('/api/dashboard');
+    if (userId && result.profile.id !== userId)
+      throw new Error('Your account changed. Reload your dashboard.');
+    return result;
+  }
   const account = await getCurrentUser();
   if (!account) throw new Error('Sign in to view your dashboard.');
   if (userId && userId !== account.id) throw new Error('You can only open your own dashboard.');
@@ -201,8 +274,8 @@ export async function loadDashboard(
 export async function saveProfile(profile: Profile): Promise<void> {
   const validationError = validateProfile(profile);
   if (validationError) throw new Error(validationError);
-  if (isDemo) {
-    saveDemoProfile(profile);
+  if (!usesSupabase) {
+    await api('/api/profile', 'PUT', profile);
     return;
   }
   const account = await getCurrentUser();
@@ -230,18 +303,11 @@ export async function saveProfile(profile: Profile): Promise<void> {
   if (!data) throw new Error('The profile was not saved. Sign in again and retry.');
 }
 
-export function getPersistenceWarning(): string | null {
-  return isDemo ? getDemoStorageWarning() : null;
-}
-
 export async function getPublicProfile(username: string): Promise<Profile | null> {
   if (!validateUsername(username)) return null;
-  if (isDemo) {
-    const profile = loadDemoProfile();
-    return profile.username === username && profile.published
-      ? { ...profile, links: profile.links.filter((link) => link.enabled) }
-      : null;
-  }
+  if (!usesSupabase)
+    return (await api<{ profile: Profile | null }>(`/api/public/${encodeURIComponent(username)}`))
+      .profile;
   const { data, error } = await getClient().rpc('get_public_profile', { p_username: username });
   if (error) throw readableError(error, 'This profile could not be loaded. Please try again.');
   return data ? fromRow(data as ProfileRow) : null;
@@ -260,8 +326,8 @@ export async function trackClick(profileId: string, linkId: string): Promise<voi
     for (const [entry, timestamp] of recentClicks)
       if (now - timestamp > 750) recentClicks.delete(entry);
   }
-  if (isDemo) {
-    recordDemoClick(profileId, linkId);
+  if (!usesSupabase) {
+    await api('/api/click', 'POST', { profileId, linkId });
     return;
   }
   const { error } = await getClient().rpc('track_link_click', {

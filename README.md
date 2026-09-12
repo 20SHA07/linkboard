@@ -1,149 +1,178 @@
 # Linkboard
 
-A small, self-hostable link-in-bio app built with Next.js, React, TypeScript, Supabase, and the open-source `qrcode` package. Each account owns one profile with an individual `/u/username` address. The dashboard edits the profile, links, appearance, QR code, and click analytics through forms.
+A self-hostable link-in-bio application built with Next.js, React, TypeScript, SQLite, and the open-source `qrcode` library. Create an account, customize a profile through the dashboard, and publish it at `/u/username`. Each user has a separate profile, links, theme, and private click analytics.
 
-The repository runs immediately in an explicitly labeled, local-only demo. Add Supabase configuration for real authentication, separate accounts, durable data, and public pages that work across devices.
+The default installation includes real authentication and a persistent SQLite database. It starts with no accounts or sample profiles. Supabase is an optional backend for serverless hosting or deployments that prefer managed authentication and Postgres.
 
-## Run locally
+## Start the application
 
-Use Node.js 22 and npm.
+Install Node.js 24 and npm, then run:
 
 ```sh
-npm install
+npm ci
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). No credentials are needed for the demo. The demo stores edits and clicks in this browser's localStorage; clearing site data resets them. Another browser or device cannot see your local demo edits. It is a product preview, not a security boundary or a production account system.
+Open [http://localhost:3000](http://localhost:3000), choose **Create account**, and register with your email address and a password of 12–128 characters. Your new profile starts unpublished, with no links, biography, or image. Registration signs you in so you can customize it and publish when ready.
 
-For a reproducible install after the lockfile exists, use `npm ci`.
+No external service or environment configuration is required for this local installation. The server creates `data/linkboard.sqlite` automatically. Accounts, profiles, sessions, and clicks persist across browser sessions and application restarts. Use a different email address to create another account; every account has its own dashboard.
 
-| Command | Purpose |
-| --- | --- |
-| `npm run dev` | Start the development server |
-| `npm run build` | Build the production application |
-| `npm start` | Serve the production build |
-| `npm run lint` | Run ESLint |
-| `npm run typecheck` | Check TypeScript |
-| `npm test` | Run the automated tests |
+| Command             | Purpose                                          |
+| ------------------- | ------------------------------------------------ |
+| `npm run dev`       | Start the development server                     |
+| `npm run build`     | Build the production application                 |
+| `npm start`         | Serve the production build                       |
+| `npm run lint`      | Run ESLint                                       |
+| `npm run typecheck` | Check TypeScript                                 |
+| `npm test`          | Run automated tests                              |
+| `npm run test:http` | Verify the production HTTP server after building |
 
-## Enable accounts and persistent profiles
+## Customize your profile
+
+Open the dashboard at `/` after signing in. **Edit profile** lets you change your display name, biography, HTTPS image URL, and username. A blank or unavailable image uses an initials avatar. Usernames are unique within your installation and use 3–30 lowercase letters, digits, and single hyphens.
+
+Use **My links** to add destinations, edit labels and URLs, choose a social platform, change the order, and enable or disable individual links. Supported platforms include Instagram, X/Twitter, TikTok, YouTube, LinkedIn, GitHub, Spotify, websites, and email. A profile supports up to 30 links.
+
+Use **Appearance** to select a theme or custom background color. The live preview shows your pending edits. Choose **Save changes** to persist them. Turn on **Publish your page** in the profile settings, save, and open `/u/your-username` to see the public page. Visitors receive only published profiles and enabled links.
+
+Link destinations accept absolute `https://` or `http://` URLs and single-address `mailto:` URLs without extra parameters. Scripts, embedded data, relative destinations, credential-bearing URLs, and malformed input are rejected by validation. Avatar URLs must use HTTPS. Images are loaded from the host you supply, which receives normal image requests from visitors.
+
+## Share the page and QR code
+
+The **QR code** view and **Share your page** dialog display the profile's QR code and let you download a PNG. The public profile also displays a downloadable QR code. It encodes the site's origin plus the saved `/u/username` address.
+
+Before a production build, set `NEXT_PUBLIC_SITE_URL` to your final public origin, such as `https://links.example.com`. Use an origin only, without a path. Without this setting, QR generation uses the currently open site's origin. A localhost QR works only on the device running the app; download the final QR after deployment and scan it from another device before printing it.
+
+Changing your username changes the public address. Save first, then download and redistribute the updated QR code.
+
+## Default backend: SQLite and server authentication
+
+With all Supabase variables empty, Linkboard uses its own server API and SQLite database. `LINKBOARD_DATABASE_PATH` overrides the default `data/linkboard.sqlite` path. This path is server-only and must point to a writable, persistent directory in production. The server initializes its schema automatically.
+
+Passwords are stored as salted scrypt hashes. A successful login creates a random session token; the database stores a hash of the token. The browser receives an `HttpOnly`, `SameSite=Lax` session cookie with a 30-day expiry. Cookies are also `Secure` when the configured site origin or direct request uses HTTPS. Signing out revokes the session. Authenticated API operations derive ownership from the session, so supplying another user's profile ID does not grant access to that profile or its analytics.
+
+**Set `NEXT_PUBLIC_SITE_URL` to the deployed HTTPS origin when serving behind a TLS reverse proxy.** The application does not trust arbitrary forwarded headers to determine a secure origin. State-changing requests require the same origin and JSON bodies are limited to 96 KiB.
+
+This authentication provider uses email as a login identifier. It does not send confirmation emails and does not include a password-reset or account-recovery flow. Keep access credentials safe. If verified email and managed recovery are required, use Supabase and configure its email delivery and recovery handling.
+
+Basic database-backed throttles limit login attempts per email and globally, registrations per email and globally, and public clicks per link and profile. These limits protect a small installation from straightforward abuse; they are not a full bot-detection system. A heavily used deployment may need tuned limits and gateway controls.
+
+Profiles and click history are stored on the server. Every user registers a separate account.
+
+### Storage, backups, and scaling
+
+SQLite uses write-ahead logging. Its `.sqlite`, `-wal`, and `-shm` files belong together while the service is running. Never commit database files, include them in a Docker image, or put them in a publicly served directory. Protect backups because they contain account information and password hashes.
+
+For a simple consistent backup, stop the application cleanly, copy the complete data directory to secure backup storage, then restart the application. Restore the complete directory while the app is stopped, preserving write permissions for the app's user. Do not copy only the main database from a running process and assume the backup contains its latest writes.
+
+Run the built-in database with a single application instance on persistent storage. Do not share it across independent serverless instances or a filesystem without reliable SQLite locking. For multiple application replicas, use Supabase. The built-in API refuses to initialize ephemeral storage on detected Vercel or Netlify deployments when Supabase is missing.
+
+## Optional backend: Supabase
+
+Supabase provides shared Postgres storage and managed authentication. It is the supported backend for Vercel and Netlify. Switching providers selects a different account database; existing SQLite users and profiles are not migrated automatically.
 
 1. Create a Supabase project, or run your own Supabase instance.
-2. Open the project's SQL editor and run the complete [`supabase/schema.sql`](supabase/schema.sql). This creates the tables, access policies, constraints, and public profile/click-recording functions required by the app. Do this before allowing registrations. Keep the `private` schema out of Supabase's exposed API schemas; the app calls only the intentionally exposed wrappers in `public`.
-3. Copy [`.env.example`](.env.example) to `.env.local`. Fill in `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` using your project's URL and public anon/publishable key. You can alternatively put the public key in `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, which takes precedence when both key variables are set. Never use a service-role or secret key: browser configuration is public.
-4. For a deployed site, set `NEXT_PUBLIC_SITE_URL` to its final origin, such as `https://links.example.com`. Use an origin only, with no `/u/...` path. When it is omitted, the app uses the browser origin.
-5. In Supabase **Authentication → URL Configuration**, set **Site URL** to the site origin. Add the app's local and production callback URLs to the allowed redirects: `http://localhost:3000/`, `http://localhost:3000/login`, `https://links.example.com/`, and `https://links.example.com/login`. The current signup flow returns the confirmation session to `/`. If you enable deployment previews, allow only the preview patterns you control. Supabase explains [redirect URL configuration](https://supabase.com/docs/guides/auth/redirect-urls).
-6. Enable the email/password provider in Supabase. Keep email confirmation enabled for a public deployment, and configure a production SMTP sender in Supabase for reliable delivery. Restart `npm run dev`, or rebuild and redeploy after changing environment variables.
-7. Visit `/login`, choose account creation, and register with a password of 12–128 characters. Confirm your email if Supabase requires it, then sign in. The database creates the new account's initial profile automatically. Use a second email address to create another independent account.
+2. Run the entire [`supabase/schema.sql`](supabase/schema.sql) in its SQL editor before registering users. This creates the profiles, click events, constraints, RLS policies, and restricted public functions. Keep the `private` schema out of Supabase's exposed API schemas.
+3. Copy [`.env.example`](.env.example) to `.env.local`. Set `NEXT_PUBLIC_SUPABASE_URL` and one public key: `NEXT_PUBLIC_SUPABASE_ANON_KEY` or `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. If both keys are present, the publishable-key value takes precedence. Never use a service-role or secret key in browser configuration.
+4. Set `NEXT_PUBLIC_SITE_URL` to the final production origin. In Supabase **Authentication → URL Configuration**, set **Site URL** to that origin. Allow `http://localhost:3000/`, `http://localhost:3000/login`, and your production root/login URLs. The signup confirmation returns to `/`. Allow preview patterns only for deployments you control. See [Supabase redirect configuration](https://supabase.com/docs/guides/auth/redirect-urls).
+5. Enable email/password authentication. Keep email confirmation enabled for public registration, and configure a production SMTP sender in Supabase for reliable delivery.
+6. Restart development or rebuild and redeploy. Create an account at `/login`, confirm email if required, and sign in. The database creates an unpublished, empty profile for each account.
 
-All accounts use the same Supabase project; you do not need one project per user. A username is unique across the installation. Changing a username also changes its public URL, so regenerate any printed or shared QR code afterward.
+All users share one Supabase project, with access isolated by their account IDs. Raw profile reads and writes require ownership. Public visitors call `get_public_profile`, which returns a published profile's public fields and enabled links. Only the owner can read analytics. Database grants and RLS enforce these restrictions independently of the dashboard.
 
-`NEXT_PUBLIC_` configuration is embedded when Next.js builds the browser bundle. Setting it only when an already-built container starts will not change the frontend configuration. See [Next.js environment variables](https://nextjs.org/docs/pages/guides/environment-variables).
+The Supabase client manages its browser session and refresh tokens. The built-in SQLite API is disabled when any Supabase configuration is present; incomplete configuration produces an error instead of silently creating a second account store.
 
-## Customize and share
-
-Sign in and open `/` for the dashboard. Update your name, biography, avatar, and username in the profile editor. Add social links with a label, a platform, and a destination URL; enable or disable individual links. Use the appearance controls to choose a theme or a custom background color. Save your changes before sharing.
-
-Link destinations accept absolute `https://` and `http://` URLs, plus a single-address `mailto:` URL without extra parameters. Scripts, embedded data, relative destinations, credential-bearing URLs, and malformed addresses are rejected. Avatar URLs must use HTTPS. If an image cannot load, the profile displays a fallback avatar.
-
-Publish the profile to make `/u/username` available to visitors. Unpublished profiles are unavailable to the public. Preview and open the public page to check the result, including mobile layout.
-
-The sharing view renders a QR code and offers a PNG download. Visitors can also display and download the profile QR on the public page. The QR encodes the canonical site origin plus `/u/username`. With no configured origin it uses the currently open site's origin. A QR generated on localhost will point to localhost and cannot be used by other devices over the internet. Generate the final image after deployment, and scan it once on another device before printing it.
-
-## Authentication and data isolation
-
-Supabase Auth handles passwords and issues the user's session. The client maintains that session and restores it on subsequent visits. The dashboard checks the session before loading account data. Signing out clears the current session from the application.
-
-The actual access boundary is Postgres row-level security (RLS) and restricted database grants, not the dashboard's visibility. Raw profile reads and writes require the authenticated user's ID to match the owner. Other visitors use the `get_public_profile` function, which returns only a published profile's public fields and enabled links; disabled links are not sent to visitors. Analytics reads are restricted to the owner. No service-role key is needed by the app, and passwords are never stored in profile records or managed by Linkboard.
-
-Because sessions are used in the browser, avoid untrusted scripts on the same origin and keep dependencies current. A public profile is intentionally public; do not put private contact details in its fields. The avatar is loaded from the URL you provide, so that image host receives normal image requests from visitors.
+`NEXT_PUBLIC_` values are embedded in the browser bundle at build time. Changing them only when an already-built container starts will not reconfigure the frontend; rebuild after changing providers or the canonical URL. See [Next.js environment variables](https://nextjs.org/docs/pages/guides/environment-variables).
 
 ## Click tracking and analytics
 
-Each enabled public link remains a normal clickable anchor. Its client-side click handler records the link ID without blocking navigation. A tracking failure does not prevent the visitor reaching the destination.
+Enabled public links remain normal clickable anchors. A client-side handler records the link ID without blocking navigation. The active backend validates that the profile is published and the link is enabled, then stores an event with a server timestamp. A failed analytics request does not prevent the visitor reaching the destination.
 
-In configured mode, the client submits the click to the Supabase recording function. The database checks that the profile is published and the link is enabled, then creates the event with a server timestamp. Only the profile owner can read those events. No IP address, cookie identifier, or visitor fingerprint is recorded by the app. In demo mode, events and timestamps live only in localStorage on the current browser, with the latest 10,000 events retained.
+Open **Analytics** in your dashboard for click totals, the activity chart, and each link's most recent click time. Refresh to load newly recorded activity. Analytics access is restricted to the account that owns the profile. The events do not contain visitor identifiers or IP addresses.
 
-Open **Analytics** in the dashboard to see click totals per link and timestamp information. Consecutive clicks on the same link within 750 milliseconds are suppressed in the current page. The dashboard paginates database reads so it does not stop at Supabase's default response limit. These are recorded clicks, not unique visitors or guaranteed traffic counts. Repeated clicks and bots can inflate totals; blocked JavaScript, network failures, and opening through a browser context menu can miss events. The public endpoint is intended for basic analytics, and is not a billing or fraud-resistant counter. For a high-traffic public installation, add gateway rate limits, monitoring, and a retention policy appropriate to your usage. A database aggregate query is preferable to downloading all events once analytics grows substantially.
+Consecutive clicks on the same link within 750 milliseconds are suppressed in the current page. These are recorded interactions, not unique visitors or guaranteed traffic counts. Repeated clicks and bots can inflate totals; throttling, blocked JavaScript, network failures, and browser context-menu navigation can miss events. Authentication uses a session cookie or token, but analytics does not set a visitor-tracking cookie.
 
-## Deploy
+Supabase reads are paginated so its default row limit does not silently truncate the history. For substantial analytics volume, use database aggregation, an appropriate retention policy, and gateway rate limits. This counter is intended for basic profile analytics, not billing or fraud prevention.
 
-The app is ready for a Next.js host or a Node/Docker server. It needs a live Supabase endpoint in configured mode. The code itself has no paid dependency; free hosting and database plans have provider quotas and are not an unlimited hosting guarantee.
+## Deploy with Node or Docker
+
+For a Node server, use Node.js 24, install with `npm ci`, create `.env.local` from the example, and set the final HTTPS site origin. Run `npm run build`, then `npm start` under your service manager. Put a TLS reverse proxy in front of port 3000. Keep the database on persistent storage and back it up separately from the application code.
+
+The included Dockerfile uses Node.js 24, Next.js standalone output, and a non-root runtime user. The Compose configuration mounts a named volume at `/app/data`, where the built-in database is stored. The image initializes that directory with permissions for its runtime user.
+
+To use the built-in backend with Docker:
+
+1. Copy `.env.example` to `.env.local`.
+2. Leave the Supabase URL and both keys empty. Set `NEXT_PUBLIC_SITE_URL` to your final HTTPS origin, or leave it empty for a localhost run.
+3. Run:
+
+```sh
+docker compose --env-file .env.local up --build -d
+```
+
+Open port 3000 through your configured host/reverse proxy. Create the first account through the application. Restarting or rebuilding the container preserves the named database volume. Do not remove that volume unless you intend to erase the installation's account and profile data.
+
+For Supabase-backed Docker, populate the Supabase URL and one public key before the same build command. Compose passes the public values as build arguments. The Dockerfile does not provision Supabase.
+
+You can also run the entire Supabase stack yourself using its official [Docker self-hosting guide](https://supabase.com/docs/guides/self-hosting/docker). Run the supplied Linkboard schema against that instance and use its public HTTPS endpoint. Supabase self-hosting requires your own compute, TLS, email service, updates, backups, and monitoring; see its [operational responsibilities](https://supabase.com/docs/guides/self-hosting).
+
+## Free serverless hosting
+
+The application has no paid software dependency. Free hosting and database plans have usage quotas; owning the code does not provide unlimited free infrastructure. Configure Supabase before deploying to either host below. Persistent SQLite on the local filesystem is not supported on these serverless platforms.
 
 ### Vercel
 
-1. Push the repository to your Git provider and import it into Vercel as a Next.js project.
-2. Add the project URL, one public key, and site URL from `.env.example` before the build. Set the canonical URL once you know your production hostname.
-3. Deploy, update Supabase Site URL and redirect allowlists, and redeploy if the public environment values changed.
-4. Register a user, save and publish a profile, open its URL in another browser, and test the downloaded QR.
-
-Vercel's free Hobby plan is restricted to personal, non-commercial use. Check its [Hobby plan](https://vercel.com/docs/plans/hobby) and [fair-use terms](https://vercel.com/docs/limits/fair-use-guidelines) for your use case.
+Import the Git repository as a Next.js project. Select [Node.js 24](https://vercel.com/docs/functions/runtimes/node-js/node-js-versions) and add the Supabase URL, one public key, and final site origin before the build. Deploy, update Supabase's allowed redirects, and rebuild if the public environment values changed. Vercel's free Hobby plan is restricted to personal, non-commercial use; check its [Hobby plan](https://vercel.com/docs/plans/hobby) and [fair-use terms](https://vercel.com/docs/limits/fair-use-guidelines).
 
 ### Netlify
 
-Import the Git repository, let Netlify detect Next.js, use `npm run build`, and retain its Next.js adapter settings. Add the public environment variables before building, then configure Supabase redirect URLs for the resulting hostname. Netlify documents [Next.js deployment support](https://docs.netlify.com/build/frameworks/framework-setup-guides/nextjs/overview/).
+Import the repository, choose [Node.js 24](https://docs.netlify.com/build/configure-builds/available-software-at-build-time/), let Netlify detect Next.js, and use `npm run build` with its Next.js adapter. Add the same public Supabase and site variables before building, then configure Supabase's redirect allowlist for the deployed hostname. See [Next.js on Netlify](https://docs.netlify.com/build/frameworks/framework-setup-guides/nextjs/overview/).
 
-Netlify offers a free plan with a hard monthly usage limit; reaching the limit can pause sites until the next cycle. Review the current [pricing and limits](https://www.netlify.com/pricing/). Supabase also offers a free plan with limits and may pause inactive projects; see [Supabase pricing](https://supabase.com/pricing).
+Netlify's free plan has a hard monthly usage limit that can pause sites when reached; review its [current pricing](https://www.netlify.com/pricing/). Supabase also has free-plan limits and may pause inactive projects; see [Supabase pricing](https://supabase.com/pricing).
 
-### Self-host with Node or Docker
+### GitHub Pages and static-only hosts
 
-For a Node server, install dependencies, create `.env.local`, run `npm run build`, and then `npm start`. Put a TLS reverse proxy in front of port 3000 and run the process with your service manager. Back up your database separately from the application.
+This repository requires a Next.js runtime for authentication/API routes and public usernames created after deployment. It is not configured for static export, and uploading `.next` to GitHub Pages will not work. Use the Node/Docker installation or a supported Next.js host with Supabase.
 
-The included Dockerfile uses Next.js standalone output and a non-root runtime user. Set the public build arguments to your own values. The following shell example uses environment variables already set in your terminal:
+## Verification
 
-```sh
-docker build \
-  --build-arg NEXT_PUBLIC_SUPABASE_URL="$NEXT_PUBLIC_SUPABASE_URL" \
-  --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY="$NEXT_PUBLIC_SUPABASE_ANON_KEY" \
-  --build-arg NEXT_PUBLIC_SITE_URL="$NEXT_PUBLIC_SITE_URL" \
-  -t linkboard .
-docker run --detach --restart unless-stopped --name linkboard -p 3000:3000 linkboard
-```
-
-In PowerShell, use `$env:NEXT_PUBLIC_SUPABASE_URL` and equivalent names, and place the build command on one line or use PowerShell line continuation. Only public browser values belong in these build arguments.
-
-To own the entire stack, follow the official [Supabase Docker self-hosting guide](https://supabase.com/docs/guides/self-hosting/docker), run `supabase/schema.sql` against that instance, and point Linkboard at its public HTTPS API endpoint. The frontend Dockerfile does not provision Supabase. Self-hosting requires your own compute, TLS, email delivery, updates, database backups, and monitoring; it does not guarantee free infrastructure. Supabase documents these [operational responsibilities](https://supabase.com/docs/guides/self-hosting).
-
-### GitHub Pages and plain static hosts
-
-This repository is not configured for static export. New `/u/username` routes are created after deployment, so a Next.js server/adapter handles routing. Uploading `.next` to GitHub Pages will not work. Supporting a static-only host would require a routing redesign or rebuilding every profile route when users change; use Vercel, Netlify's Next.js adapter, or the included Node/Docker deployment for this version.
-
-## Verify before a public launch
-
-Run:
+Run the local checks with Node.js 24:
 
 ```sh
 npm test
 npm run lint
 npm run typecheck
 npm run build
+npm run test:http
 ```
 
-The automated suite covers URL/profile validation, corrupted browser data, storage failures, incomplete configuration, and authentication/data access behavior using a mocked Supabase client. It also runs the actual schema and SQL authorization tests in [PGlite](https://pglite.dev), PostgreSQL compiled to WebAssembly. These database tests switch between anonymous and authenticated roles and verify ownership, draft/disabled-link privacy, click permissions, server timestamps, validation, and safe schema reapplication. They use a minimal substitute for Supabase's managed `auth.users` table and `auth.uid()` helper; they do not test Supabase Auth, email delivery, PostgREST, or your deployed project's configuration.
+The test suite includes input validation, data access/authentication behavior, and database authorization checks. The HTTP check starts the production server with an isolated temporary SQLite database and verifies registration, login, private profiles, account isolation, click tracking, session revocation, and persistence after a server restart. It removes its temporary database afterward and does not use your installation's accounts or data.
 
-Also run [`supabase/tests/rls.sql`](supabase/tests/rls.sql) in a development Supabase SQL editor after the schema to check the installed database. It creates temporary test accounts inside a transaction, performs the same authorization assertions, and rolls back the fixtures. It raises an exception on a failing assertion. `npm test` executes this script in an isolated embedded PostgreSQL database; it has not been executed against your deployment automatically.
+Supabase SQL checks run in an isolated [PGlite](https://pglite.dev) PostgreSQL environment with substitutes for the managed auth table and helper. They do not test Supabase Auth, SMTP, PostgREST, or your deployed configuration.
 
-Then run this browser integration check on your configured project:
+For a Supabase deployment, also run [`supabase/tests/rls.sql`](supabase/tests/rls.sql) in a development project's SQL editor after the schema. It checks anonymous and authenticated access, ownership, draft/disabled-link privacy, click permissions, and timestamps, then rolls back its fixtures. It raises an exception on a failing assertion.
 
-1. Register users A and B in separate browser profiles. Set different profile names and links, and verify each account restores its own edits after signing out and back in.
-2. Publish A. While signed out, verify its public profile loads. Unpublish it and verify a fresh signed-out request cannot load its profile or links.
-3. As B, use the browser's Supabase client/API with B's session to attempt an update or delete of A's profile ID. Verify the database does not change A's row; an RLS-blocked operation may affect zero rows rather than return an error.
-4. As B and as an anonymous client, query A's click events. Verify B sees no events and anonymous direct access is denied. Anonymous raw profile reads and updates must also be denied. The public lookup must include enabled links only, even when a disabled link exists in the owner's dashboard.
-5. Click an enabled link on A's published page while signed out. Verify A sees the event with a timestamp, B cannot see it, and an unknown/disabled link cannot create an event.
-6. Test an expired session, a disconnected network, an unavailable image, a duplicate username, and invalid URL input. Confirm errors are readable and unsaved changes are not mistaken for a successful save.
-7. Open the deployed public page on mobile and scan the downloaded QR from another device. Verify the QR contains the final public address.
+Before sharing a deployment:
 
-Keep the SQL and app version together when deploying. Review the database and auth logs if an integration check fails; do not disable RLS to work around it.
+1. Register accounts A and B in separate browser profiles. Save different profile data and verify each account restores its own dashboard after signing out and back in.
+2. Publish A, open its public page while signed out, and check that disabled links are absent. Unpublish and verify a fresh public request cannot load it.
+3. Attempt to read or modify A's private data with B's session using the active backend API. Verify authorization denies access or returns no rows, and A's data stays unchanged.
+4. Click an enabled public link and verify only A can read its analytics. An unknown, disabled, or unpublished link must not create an event.
+5. Test failed login, invalid URLs, duplicate usernames, unavailable images, and network failures. Confirm unsaved changes are not presented as successfully saved.
+6. Restart the self-hosted application and verify saved accounts and profiles persist. Check the production page on mobile and scan its downloaded QR from another device.
 
 ## Troubleshooting
 
-| Symptom | Check |
-| --- | --- |
-| The app shows demo mode after deployment | The public Supabase URL and one public key must be set at build time; rebuild after adding them. |
-| Login works but saving fails | Run the entire schema, verify the project's URL/key pair, and inspect the surfaced error. |
-| Confirmation email returns to localhost | Update Supabase Site URL and allowed redirect URLs for production. |
-| A public profile is missing | Check spelling, publishing state, network access, and whether the Supabase project is paused. Local demo edits do not propagate to other devices. |
-| QR points to an old domain | Correct `NEXT_PUBLIC_SITE_URL`, rebuild, then download the QR again. |
-| Avatar does not appear | Use a directly accessible HTTPS image URL; the fallback avatar is expected for inaccessible images. |
-| Click totals look incomplete | Check the network, enabled link state, and analytics limitations above. Demo data is browser-local. |
-| Local demo changes disappear | Private browsing, blocked storage, or clearing site data can remove localStorage. Configure Supabase for durable data. |
+| Symptom                                              | Check                                                                                                |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `node:sqlite` is unavailable                         | Use Node.js 24 for development, tests, builds, and the server runtime.                               |
+| Database cannot be opened                            | Check `LINKBOARD_DATABASE_PATH`, its parent directory's write permissions, and persistent storage.   |
+| Accounts disappear after replacing a container       | Restore the original persistent volume. Container-local files are not a durable deployment strategy. |
+| Serverless deployment reports configuration required | Set the public Supabase URL and one public key, apply the schema, and rebuild.                       |
+| Supabase login works but saving fails                | Run the complete schema and inspect the returned validation or permission error.                     |
+| Authentication fails behind a reverse proxy          | Set the final HTTPS `NEXT_PUBLIC_SITE_URL` before building; the browser origin must match it.        |
+| Supabase confirmation returns to localhost           | Update Supabase Site URL and allowed redirects for production.                                       |
+| Public profile is missing                            | Check the saved username, publishing state, network, and backend availability.                       |
+| QR points to an old domain                           | Correct `NEXT_PUBLIC_SITE_URL`, rebuild, and download the QR again.                                  |
+| Avatar does not appear                               | Use a directly accessible HTTPS image URL; inaccessible images use the fallback.                     |
+| Click totals look incomplete                         | Check enabled/published state, network requests, and the analytics limitations above.                |

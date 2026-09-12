@@ -13,3 +13,12 @@ test-results
 .agents
 .npm-cache
 artifacts
+data
+*.sqlite
+*.sqlite-*
+**/*.sqlite
+**/*.sqlite-*
+*.db
+*.db-*
+**/*.db
+**/*.db-*

@@ -464,7 +464,7 @@ a {
   color: #8b9283;
   line-height: 1.7;
 }
-.demo-banner {
+.draft-banner {
   display: flex;
   align-items: center;
   gap: 7px;
@@ -473,7 +473,11 @@ a {
   margin: 0 0 21px;
   line-height: 1.6;
 }
-.demo-banner > a {
+.draft-banner > button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
   display: flex;
   align-items: center;
   gap: 3px;
@@ -1812,7 +1816,7 @@ a {
   flex: 1;
   background: #e4e9db;
 }
-.auth-demo-notice {
+.auth-notice {
   border: 1px solid #dfe7d4;
   border-radius: 8px;
   background: #f0f5e6;
@@ -1821,11 +1825,11 @@ a {
   line-height: 1.8;
   color: #889974;
 }
-.auth-demo-notice strong {
+.auth-notice strong {
   color: #607a45;
   font-weight: 550;
 }
-.auth-demo-notice code {
+.auth-notice code {
   font-size: 10px;
   overflow-wrap: anywhere;
 }
@@ -1908,12 +1912,12 @@ a {
   .profile-url > span {
     max-width: 170px;
   }
-  .demo-banner {
+  .draft-banner {
     font-size: 8px;
     flex-wrap: wrap;
     gap: 5px;
   }
-  .demo-banner > a {
+  .draft-banner > button {
     font-size: 8px;
   }
   .share-preview {
@@ -2063,8 +2067,8 @@ a {
   .profile-url > span {
     max-width: 250px;
   }
-  .demo-banner,
-  .demo-banner > a {
+  .draft-banner,
+  .draft-banner > button {
     font-size: 10px;
   }
   .quick-stats {
@@ -2196,15 +2200,15 @@ a {
   .eyebrow {
     font-size: 8px;
   }
-  .demo-banner {
+  .draft-banner {
     font-size: 8px;
     gap: 5px;
     align-items: flex-start;
   }
-  .demo-banner > .status-dot {
+  .draft-banner > .status-dot {
     margin-top: 4px;
   }
-  .demo-banner > a {
+  .draft-banner > button {
     font-size: 8px;
   }
   .profile-summary {
