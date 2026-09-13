@@ -87,6 +87,14 @@ export default function ProfileCard({
   const links = profile.links.filter((link) => link.enabled && safeUrl(link.url));
   const customBackground = profileThemeStyle(profile);
   const Heading = compact ? 'h2' : 'h1';
+  const recordClick = (linkId: string) => {
+    // Tracking must never prevent a visitor from reaching the destination.
+    try {
+      onLinkClick?.(linkId);
+    } catch {
+      /* Best-effort analytics. */
+    }
+  };
 
   return (
     <section
@@ -120,13 +128,11 @@ export default function ProfileCard({
               href={link.url}
               target="_blank"
               rel="noopener noreferrer"
-              onClick={() => {
-                // Tracking must never prevent a visitor from reaching the destination.
-                try {
-                  onLinkClick?.(link.id);
-                } catch {
-                  /* Best-effort analytics. */
-                }
+              onClick={() => recordClick(link.id)}
+              onAuxClick={(event) => {
+                // Middle-button navigation fires auxclick, not click. Right-click
+                // only opens a context menu and must not increment analytics.
+                if (event.button === 1) recordClick(link.id);
               }}
               aria-label={`${link.title || link.platform} (opens in a new tab)`}
             >

@@ -5,6 +5,7 @@ const backend = vi.hoisted(() => ({
   createClient: vi.fn(),
   getUser: vi.fn(),
   signUp: vi.fn(),
+  resend: vi.fn(),
   signInWithPassword: vi.fn(),
   from: vi.fn(),
   rpc: vi.fn(),
@@ -25,6 +26,7 @@ beforeEach(() => {
     auth: {
       getUser: backend.getUser,
       signUp: backend.signUp,
+      resend: backend.resend,
       signInWithPassword: backend.signInWithPassword,
     },
     from: backend.from,
@@ -33,6 +35,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
 });
@@ -44,6 +47,91 @@ async function configuredData() {
 }
 
 describe('configuration and authentication boundaries', () => {
+  it('resends signup confirmation only for a valid email and preserves the Pages redirect', async () => {
+    vi.stubEnv('NEXT_PUBLIC_STATIC_EXPORT', 'true');
+    vi.stubEnv('NEXT_PUBLIC_BASE_PATH', '/linkboard');
+    vi.stubGlobal('window', { location: { origin: 'https://20sha07.github.io' } });
+    const data = await configuredData();
+    backend.resend.mockResolvedValue({ data: {}, error: null });
+    await expect(data.resendConfirmation('invalid')).rejects.toThrow(/valid email/);
+    expect(backend.resend).not.toHaveBeenCalled();
+    await data.resendConfirmation(' owner@example.com ');
+    expect(backend.resend).toHaveBeenCalledWith({
+      type: 'signup',
+      email: 'owner@example.com',
+      options: { emailRedirectTo: 'https://20sha07.github.io/linkboard/' },
+    });
+  });
+
+  it('surfaces email sending limits instead of reporting a confirmation sent', async () => {
+    const data = await configuredData();
+    backend.resend.mockResolvedValue({ error: { message: 'Email rate limit exceeded' } });
+    await expect(data.resendConfirmation('owner@example.com')).rejects.toThrow(
+      'Email rate limit exceeded',
+    );
+  });
+
+  it('does not attempt hosted confirmation for built-in accounts', async () => {
+    const data = await import('../lib/data');
+    await expect(data.resendConfirmation('owner@example.com')).rejects.toThrow(
+      /does not use email confirmation/,
+    );
+    expect(backend.createClient).not.toHaveBeenCalled();
+  });
+
+  it('bounds a stalled hosted request and keeps the error actionable', async () => {
+    const timeout = new AbortController();
+    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(timeout.signal);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        (_input, init: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            init.signal?.addEventListener('abort', () => reject(init.signal?.reason), {
+              once: true,
+            });
+          }),
+      ),
+    );
+    const data = await configuredData();
+    backend.getUser.mockResolvedValue({ data: { user: null }, error: null });
+    await data.getCurrentUser();
+    const hostedFetch = backend.createClient.mock.calls[0][2].global.fetch as typeof fetch;
+    const request = hostedFetch('https://project.supabase.co/auth/v1/user');
+    const rejection = expect(request).rejects.toMatchObject({
+      name: 'AbortError',
+      message: 'The server took too long to respond. Check your connection and try again.',
+    });
+    timeout.abort(new DOMException('Request timed out', 'TimeoutError'));
+    await rejection;
+    expect(timeoutSpy).toHaveBeenCalledWith(20_000);
+  });
+
+  it('preserves caller cancellation and request options in hosted requests', async () => {
+    const timeout = new AbortController();
+    vi.spyOn(AbortSignal, 'timeout').mockReturnValue(timeout.signal);
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ ok: true }));
+    vi.stubGlobal('fetch', fetchMock);
+    const data = await configuredData();
+    backend.getUser.mockResolvedValue({ data: { user: null }, error: null });
+    await data.getCurrentUser();
+    const hostedFetch = backend.createClient.mock.calls[0][2].global.fetch as typeof fetch;
+    const caller = new AbortController();
+    const options = {
+      method: 'POST',
+      headers: { apikey: 'public-test-key' },
+      body: '{"value":"kept"}',
+      signal: caller.signal,
+    };
+    await hostedFetch('https://project.supabase.co/rest/v1/rpc/get_public_profile', options);
+    const forwarded = fetchMock.mock.calls[0][1];
+    expect(forwarded).toMatchObject({ ...options, signal: expect.any(AbortSignal) });
+    expect(forwarded.signal.aborted).toBe(false);
+    caller.abort();
+    expect(forwarded.signal.aborted).toBe(true);
+    expect(timeout.signal.aborted).toBe(false);
+  });
+
   it('uses real server sessions by default without requiring a hosted backend', async () => {
     const fetchMock = vi.fn().mockResolvedValue(Response.json({ account: null }));
     vi.stubGlobal('fetch', fetchMock);
@@ -189,6 +277,47 @@ describe('built-in server API', () => {
   beforeEach(() => {
     // Keep account-change messages inside this test process; no browser or storage is used.
     vi.stubGlobal('BroadcastChannel', undefined);
+  });
+
+  it('finishes successful authentication when cross-tab channels are blocked', async () => {
+    const dispatchEvent = vi.fn();
+    vi.stubGlobal('window', { dispatchEvent });
+    vi.stubGlobal(
+      'BroadcastChannel',
+      vi.fn(function () {
+        throw new DOMException('Storage access denied', 'SecurityError');
+      }),
+    );
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async () => Response.json({ ok: true })),
+    );
+    const data = await import('../lib/data');
+    await expect(data.signIn('owner@example.com', 'a-long-test-password')).resolves.toBeUndefined();
+    await expect(data.signOut()).resolves.toBeUndefined();
+    expect(dispatchEvent).toHaveBeenCalledTimes(2);
+  });
+
+  it('still detects account changes on focus when cross-tab channels are blocked', async () => {
+    const browser = new EventTarget();
+    const document = new EventTarget();
+    vi.stubGlobal('window', browser);
+    vi.stubGlobal('document', document);
+    vi.stubGlobal(
+      'BroadcastChannel',
+      vi.fn(function () {
+        throw new DOMException('Storage access denied', 'SecurityError');
+      }),
+    );
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ account: null })));
+    const data = await import('../lib/data');
+    const callback = vi.fn();
+    const unsubscribe = data.subscribeAuth(callback);
+    browser.dispatchEvent(new Event('focus'));
+    await vi.waitFor(() => expect(callback).toHaveBeenCalledWith(null));
+    unsubscribe();
+    browser.dispatchEvent(new Event('focus'));
+    expect(callback).toHaveBeenCalledTimes(1);
   });
 
   it('prefixes server API requests when the app is hosted below a project path', async () => {

@@ -89,6 +89,10 @@ All users share one Supabase project, with access isolated by their account IDs.
 
 The Supabase client manages its browser session and refresh tokens. The built-in SQLite API is disabled when any Supabase configuration is present; incomplete configuration produces an error instead of silently creating a second account store.
 
+If a confirmation link expires, the sign-in page explains the problem. Enter your email and choose **Resend confirmation email** to request another link. The button waits one minute between requests, and Supabase/SMTP limits still apply. Emails are sent only after you request them.
+
+For existing installations, apply new files in [`supabase/migrations/`](supabase/migrations/) in filename order. The initial schema already includes these fixes for new installations. The `202609130001` migration accepts valid URLs with a trailing DNS root dot and preserves account data and ownership policies.
+
 `NEXT_PUBLIC_` values are embedded in the browser bundle at build time. Changing them only when an already-built container starts will not reconfigure the frontend; rebuild after changing providers or the canonical URL. See [Next.js environment variables](https://nextjs.org/docs/pages/guides/environment-variables).
 
 ## Click tracking and analytics
@@ -96,6 +100,8 @@ The Supabase client manages its browser session and refresh tokens. The built-in
 Enabled public links remain normal clickable anchors. A client-side handler records the link ID without blocking navigation. The active backend validates that the profile is published and the link is enabled, then stores an event with a server timestamp. A failed analytics request does not prevent the visitor reaching the destination.
 
 Open **Analytics** in your dashboard for click totals, the activity chart, and each link's most recent click time. Refresh to load newly recorded activity. Analytics access is restricted to the account that owns the profile. The events do not contain visitor identifiers or IP addresses.
+
+The 7-day and 30-day charts use calendar days in your browser's timezone, including today up to the last refresh. Chart totals and the last-seven-days summary use the same boundaries. Primary, keyboard, and middle-button link activation are tracked; opening a context menu alone is not a click.
 
 Consecutive clicks on the same link within 750 milliseconds are suppressed in the current page. These are recorded interactions, not unique visitors or guaranteed traffic counts. Repeated clicks and bots can inflate totals; throttling, blocked JavaScript, network failures, and browser context-menu navigation can miss events. Authentication uses a session cookie or token, but analytics does not set a visitor-tracking cookie.
 

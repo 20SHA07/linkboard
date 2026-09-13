@@ -10,6 +10,26 @@ import { supabaseUrl, supabaseKey, usesSupabase } from './backend-config';
 export { usesSupabase } from './backend-config';
 let client: SupabaseClient | undefined;
 
+/** Bound hosted auth and database requests just like the built-in server API. */
+const fetchWithTimeout: typeof fetch = async (input, init) => {
+  const timeout = AbortSignal.timeout(20_000);
+  const originalSignal = init?.signal ?? (input instanceof Request ? input.signal : undefined);
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: originalSignal ? AbortSignal.any([originalSignal, timeout]) : timeout,
+    });
+  } catch (cause) {
+    if (timeout.aborted)
+      // AbortError also prevents the database client from retrying a timed-out read.
+      throw new DOMException(
+        'The server took too long to respond. Check your connection and try again.',
+        'AbortError',
+      );
+    throw cause;
+  }
+};
+
 async function api<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
   let response: Response;
   try {
@@ -44,10 +64,24 @@ async function api<T>(path: string, method = 'GET', body?: unknown): Promise<T> 
 function announceAuthChange() {
   if (typeof window === 'undefined') return;
   window.dispatchEvent?.(new Event('linkboard:auth'));
-  if (typeof BroadcastChannel !== 'undefined') {
-    const channel = new BroadcastChannel('linkboard:auth');
-    channel.postMessage('changed');
-    channel.close();
+  const channel = authChannel();
+  if (channel) {
+    try {
+      channel.postMessage('changed');
+    } catch {
+      // Cross-tab notifications are optional; the authenticated request succeeded.
+    } finally {
+      channel.close();
+    }
+  }
+}
+
+function authChannel(): BroadcastChannel | null {
+  try {
+    return typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('linkboard:auth') : null;
+  } catch {
+    // Some privacy settings expose this API while blocking its storage access.
+    return null;
   }
 }
 
@@ -59,6 +93,7 @@ function getClient(): SupabaseClient {
   if (!client) {
     client = createClient(supabaseUrl, supabaseKey, {
       auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+      global: { fetch: fetchWithTimeout },
     });
   }
   return client;
@@ -107,8 +142,7 @@ export function subscribeAuth(callback: (account: Account | null) => void): () =
     const visible = () => {
       if (document.visibilityState === 'visible') check();
     };
-    const channel =
-      typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('linkboard:auth') : null;
+    const channel = authChannel();
     if (channel) channel.onmessage = check;
     window.addEventListener('linkboard:auth', check);
     window.addEventListener('focus', check);
@@ -176,6 +210,19 @@ export async function signOut(): Promise<void> {
   }
   const { error } = await getClient().auth.signOut();
   if (error) throw readableError(error, 'Could not sign out. Please try again.');
+}
+
+export async function resendConfirmation(email: string): Promise<void> {
+  if (!validateEmail(email.trim())) throw new Error('Enter a valid email address.');
+  if (!usesSupabase) throw new Error('This installation does not use email confirmation.');
+  const redirect =
+    typeof window !== 'undefined' ? `${window.location.origin}${appPath('/')}` : undefined;
+  const { error } = await getClient().auth.resend({
+    type: 'signup',
+    email: email.trim(),
+    options: { emailRedirectTo: redirect },
+  });
+  if (error) throw readableError(error, 'Could not send a confirmation email. Please try again.');
 }
 
 interface ProfileRow {

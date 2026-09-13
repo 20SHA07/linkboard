@@ -14,6 +14,19 @@ async function urls({ base = '', exported = false, site = '' } = {}) {
 }
 
 describe('deployment URLs', () => {
+  it.each([
+    ['', '#error=access_denied&error_code=otp_expired', 'expired'],
+    ['?error_code=otp_expired', '', 'expired'],
+    ['?confirmation=expired', '', 'expired'],
+    ['?confirmation=failed', '', 'failed'],
+    ['', '#error_description=%3Cscript%3Euntrusted%3C%2Fscript%3E', 'failed'],
+    ['?confirmation=untrusted', '', null],
+    ['', '#access_token=valid-callback&refresh_token=test', null],
+  ])('maps confirmation failures to fixed messages: %s %s', async (search, hash, expected) => {
+    const url = await urls();
+    expect(url.confirmationFailure(search, hash)).toBe(expected);
+  });
+
   it('preserves server profile paths and same-origin API routes', async () => {
     const url = await urls();
     expect(url.publicProfileUrl('someone', 'http://localhost:3000')).toBe(

@@ -32,7 +32,8 @@ import {
 } from 'lucide-react';
 import { getCurrentUser, loadDashboard, saveProfile, signOut, subscribeAuth } from '@/lib/data';
 import { validateProfile } from '@/lib/validation';
-import { publicProfileUrl, isStaticExport } from '@/lib/urls';
+import { dailyClicks } from '@/lib/analytics';
+import { publicProfileUrl, isStaticExport, confirmationFailure } from '@/lib/urls';
 import type { Account, ClickEvent, Platform, Profile, Theme } from '@/lib/types';
 import ProfileCard from './profile-card';
 import QRCode from './qr-code';
@@ -124,11 +125,12 @@ export default function Dashboard() {
     profile && savedProfile ? JSON.stringify(profile) !== JSON.stringify(savedProfile) : false;
   const initialize = useCallback(async () => {
     const sequence = ++loadSequence.current;
+    const confirmation = confirmationFailure(window.location.search, window.location.hash);
     try {
       const user = await getCurrentUser();
       if (sequence !== loadSequence.current) return;
       if (!user) {
-        router.replace('/login');
+        router.replace(confirmation ? `/login/?confirmation=${confirmation}` : '/login');
         return;
       }
       setAccount(user);
@@ -160,24 +162,32 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void initialize();
     let deferred: ReturnType<typeof setTimeout> | undefined;
+    const confirmation = confirmationFailure(window.location.search, window.location.hash);
     let unsubscribe = () => {};
+    const clearAccountView = () => {
+      ++loadSequence.current;
+      setAccount(null);
+      setProfile(null);
+      setSavedProfile(null);
+      setEvents([]);
+      setSaving(false);
+      setRefreshing(false);
+      setLoadError('');
+      setError('');
+      setToast('');
+      setShareOpen(false);
+      setPreviewOpen(false);
+      setAddOpen(false);
+      setNewLink({ title: '', url: '', platform: 'website' });
+      setNewLinkError('');
+    };
     try {
       unsubscribe = subscribeAuth((user) => {
         if (!user) {
-          ++loadSequence.current;
-          setProfile(null);
-          setSavedProfile(null);
-          setEvents([]);
-          setSaving(false);
-          setRefreshing(false);
-          router.replace('/login');
+          clearAccountView();
+          router.replace(confirmation ? `/login/?confirmation=${confirmation}` : '/login');
         } else if (user && loadedAccount.current && user.id !== loadedAccount.current) {
-          ++loadSequence.current;
-          setProfile(null);
-          setSavedProfile(null);
-          setEvents([]);
-          setSaving(false);
-          setRefreshing(false);
+          clearAccountView();
           setLoading(true);
           // Supabase auth callbacks must release their lock before calling auth again.
           deferred = setTimeout(() => void initialize(), 0);
@@ -367,9 +377,8 @@ export default function Dashboard() {
       </main>
     );
   const activeLinks = profile.links.filter((l) => l.enabled).length;
-  const selectedEvents = events.filter(
-    (e) => analyticsNow - new Date(e.timestamp).getTime() < analyticsDays * 86400000,
-  );
+  const chart = dailyClicks(events, analyticsDays, analyticsNow);
+  const weekClicks = analyticsDays === 7 ? chart.total : dailyClicks(events, 7, analyticsNow).total;
   const counts = Object.fromEntries(
     profile.links.map((l) => [l.id, events.filter((e) => e.linkId === l.id).length]),
   );
@@ -872,14 +881,8 @@ export default function Dashboard() {
                     </div>
                     <div>
                       <Link2 size={20} />
-                      <strong>
-                        {
-                          events.filter(
-                            (e) => analyticsNow - new Date(e.timestamp).getTime() < 7 * 86400000,
-                          ).length
-                        }
-                      </strong>
-                      <span>Clicks this week</span>
+                      <strong>{weekClicks.toLocaleString()}</strong>
+                      <span>Last 7 days</span>
                     </div>
                     <div>
                       <BarChart3 size={20} />
@@ -902,21 +905,15 @@ export default function Dashboard() {
                     <div
                       className="bar-chart"
                       role="img"
-                      aria-label={`${selectedEvents.length} clicks in the last ${analyticsDays} days`}
+                      aria-label={`${chart.total} clicks in the last ${analyticsDays} days`}
                     >
-                      {Array.from({ length: analyticsDays }, (_, i) => {
-                        const d = new Date(analyticsNow);
-                        d.setDate(d.getDate() - analyticsDays + i + 1);
+                      {chart.days.map(({ date: d, count: n }, i) => {
                         const day = d.toLocaleDateString();
-                        const n = selectedEvents.filter(
-                          (e) => new Date(e.timestamp).toLocaleDateString() === day,
-                        ).length;
-                        const max = Math.max(1, selectedEvents.length);
                         return (
                           <div className="chart-day" key={i} title={`${day}: ${n} clicks`}>
                             <div className="chart-bar-track">
                               <div
-                                style={{ height: `${Math.max(2, (n / max) * 100)}%` }}
+                                style={{ height: `${Math.max(2, (n / chart.peak) * 100)}%` }}
                                 className={n === 0 ? 'zero' : ''}
                               />
                             </div>

@@ -24,8 +24,9 @@ begin
       exception when invalid_text_representation then return false;
       end;
     end if;
+    -- A terminal DNS root dot is valid and is preserved by URL.href.
     -- No credentials, whitespace, percent-encoded hostnames or executable schemes.
-    return value ~* '^https?://([a-z0-9]([a-z0-9.-]*[a-z0-9])?|\[[0-9a-f:]+\])(:[0-9]{1,5})?([/?#][^[:space:]]*)?$'
+    return value ~* '^https?://([a-z0-9]([a-z0-9.-]*[a-z0-9])?\.?|\[[0-9a-f:]+\])(:[0-9]{1,5})?([/?#][^[:space:]]*)?$'
       and coalesce(substring(lower(value) from '^https?://[^/?#]+:([0-9]{1,5})(?:[/?#]|$)')::integer, 0) <= 65535;
   end if;
   if not image_only and value ~* '^mailto:' then

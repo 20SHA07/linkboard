@@ -3,8 +3,9 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowRight, Loader2 } from 'lucide-react';
-import { getCurrentUser, signIn, signUp } from '@/lib/data';
+import { getCurrentUser, resendConfirmation, signIn, signUp, usesSupabase } from '@/lib/data';
 import { validateEmail } from '@/lib/validation';
+import { confirmationFailure } from '@/lib/urls';
 import { needsBackendSetup } from '@/lib/backend-config';
 import ThemeToggle from './theme/toggle';
 
@@ -15,14 +16,23 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [checkingSession, setCheckingSession] = useState(!needsBackendSetup);
   const [busy, setBusy] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   useEffect(() => {
     if (needsBackendSetup) return;
     let active = true;
+    const confirmation = confirmationFailure(window.location.search, window.location.hash);
     void getCurrentUser()
       .then((user) => {
         if (active && user) router.replace('/');
+        else if (active && confirmation)
+          setError(
+            confirmation === 'expired'
+              ? 'This confirmation link has expired or was already used. Sign in if you already confirmed your email, or enter your email and choose Resend confirmation email.'
+              : 'Your email could not be confirmed. Enter your email and choose Resend confirmation email.',
+          );
       })
       .catch((cause: unknown) => {
         if (active)
@@ -39,6 +49,37 @@ export default function Login() {
       active = false;
     };
   }, [router]);
+  useEffect(() => {
+    if (!resendCooldown) return;
+    const timer = window.setTimeout(() => setResendCooldown(false), 60_000);
+    return () => window.clearTimeout(timer);
+  }, [resendCooldown]);
+
+  async function resend() {
+    if (busy || checkingSession || needsBackendSetup || resendCooldown) return;
+    setError('');
+    setMessage('');
+    if (!validateEmail(email.trim())) {
+      setError('Enter your email address above to request a confirmation link.');
+      return;
+    }
+    setBusy(true);
+    setResending(true);
+    setResendCooldown(true);
+    try {
+      await resendConfirmation(email);
+      setMessage(
+        'If this address has an unconfirmed account, a new confirmation link is on its way. Check your inbox and spam folder.',
+      );
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : 'The confirmation email could not be sent.',
+      );
+    } finally {
+      setBusy(false);
+      setResending(false);
+    }
+  }
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (busy || checkingSession || needsBackendSetup) return;
@@ -64,6 +105,7 @@ export default function Login() {
       } else {
         const result = await signUp(email.trim(), password);
         if (result.confirmationRequired) {
+          setResendCooldown(true);
           setMessage(
             'Check your inbox for a confirmation link. After confirming your email, sign in to your new space.',
           );
@@ -182,9 +224,11 @@ export default function Login() {
                 <Loader2 className="spin" size={16} aria-hidden="true" />
                 {checkingSession
                   ? 'Checking your session…'
-                  : mode === 'signup'
-                    ? 'Creating your account…'
-                    : 'Signing you in…'}
+                  : resending
+                    ? 'Sending confirmation…'
+                    : mode === 'signup'
+                      ? 'Creating your account…'
+                      : 'Signing you in…'}
               </>
             ) : (
               <>
@@ -208,6 +252,17 @@ export default function Login() {
               {mode === 'signin' ? 'Create an account' : 'Sign in'}
             </button>
           </div>
+          {usesSupabase && mode === 'signin' && (
+            <div className="auth-toggle">
+              <button
+                type="button"
+                disabled={busy || checkingSession || needsBackendSetup || resendCooldown}
+                onClick={() => void resend()}
+              >
+                {resendCooldown ? 'Wait a minute before resending' : 'Resend confirmation email'}
+              </button>
+            </div>
+          )}
           <div className="auth-divider">A HOME FOR EVERYTHING YOU DO</div>
         </form>
       </main>
