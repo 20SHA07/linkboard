@@ -114,8 +114,46 @@ try {
   assert.equal(profile.bio, '');
   assert.equal(profile.avatarUrl, '');
   assert.equal((await request(`/api/public/${profile.username}`)).data.profile, null);
+  const imageBytes = Buffer.from(
+    'UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA',
+    'base64',
+  );
+  const uploadImage = (cookie, uploadOrigin = origin) =>
+    fetch(`${origin}/api/media`, {
+      method: 'POST',
+      headers: {
+        Origin: uploadOrigin,
+        'Content-Type': 'image/webp',
+        'X-Linkboard-Owner': profile.id,
+        ...(cookie ? { Cookie: cookie } : {}),
+      },
+      body: imageBytes,
+    });
+  assert.equal((await uploadImage()).status, 401);
+  assert.equal((await uploadImage(cookieA, 'https://another.example')).status, 403);
+  assert.equal((await uploadImage(cookieB)).status, 403);
+  const uploaded = await uploadImage(cookieA);
+  assert.equal(uploaded.status, 201);
+  const imageSource = (await uploaded.json()).source;
+  assert.ok(imageSource.startsWith(`media:${profile.id}/`));
+  const imageUrl = `${origin}/api/media/${imageSource.slice('media:'.length)}`;
+  assert.equal((await fetch(imageUrl)).status, 404);
+  assert.equal((await fetch(imageUrl, { headers: { Cookie: cookieB } })).status, 404);
+  const ownerImage = await fetch(imageUrl, { headers: { Cookie: cookieA } });
+  assert.equal(ownerImage.status, 200);
+  assert.equal(ownerImage.headers.get('content-type'), 'image/webp');
+  assert.match(ownerImage.headers.get('cache-control'), /no-store/);
+  assert.deepEqual(Buffer.from(await ownerImage.arrayBuffer()), imageBytes);
   profile.name = 'Verified owner';
   profile.username = 'verified-owner';
+  profile.avatarUrl = imageSource;
+  profile.appearance = {
+    backgroundImageUrl: imageSource,
+    backgroundPosition: 'center',
+    backgroundOverlay: 20,
+    avatarPosition: 'center',
+    dashboardBackground: false,
+  };
   profile.links = [
     {
       id: 'public-link',
@@ -136,6 +174,9 @@ try {
   assert.equal((await request('/api/profile', 'PUT', profile, cookieB)).status, 403);
   assert.equal((await request('/api/profile', 'PUT', profile, cookieA)).status, 200);
   const publicProfile = (await request('/api/public/verified-owner')).data.profile;
+  assert.equal(publicProfile.avatarUrl, imageSource);
+  assert.deepEqual(publicProfile.appearance, profile.appearance);
+  assert.equal((await fetch(imageUrl)).status, 200);
   assert.equal(publicProfile.links.length, 1);
   assert.equal(publicProfile.links[0].id, 'public-link');
   assert.equal(
@@ -167,6 +208,7 @@ try {
   );
   await stop();
   await start();
+  assert.deepEqual(Buffer.from(await (await fetch(imageUrl)).arrayBuffer()), imageBytes);
   assert.equal(
     (await request('/api/dashboard', 'GET', undefined, cookieA)).data.profile.name,
     'Verified owner',
@@ -181,7 +223,7 @@ try {
   assert.equal(signin.status, 200);
   assert.notEqual(signin.cookie.split(';')[0], cookieA);
   console.log(
-    'PASS: Production HTTP registration, login, private profiles, owner isolation, click tracking, restart persistence, and session revocation.',
+    'PASS: Production HTTP registration, login, private profiles, owner isolation, image uploads and visibility, click tracking, restart persistence, and session revocation.',
   );
   if (process.argv.includes('--review')) {
     if (!process.stdin.isTTY) throw new Error('Interactive review requires a terminal.');

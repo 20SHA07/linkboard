@@ -330,6 +330,202 @@
   opacity: 0.6;
   text-align: center;
 }
+.profile-image-background {
+  isolation: isolate;
+}
+.public-page.profile-image-background,
+.profile-card.profile-image-background {
+  position: relative;
+}
+.profile-background {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+  visibility: hidden;
+}
+.profile-background.is-ready {
+  visibility: visible;
+}
+.profile-background img,
+.profile-background-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.profile-background img {
+  display: block;
+  object-fit: cover;
+}
+.profile-background-overlay {
+  background: #000;
+}
+:is(.public-page, .profile-card):has(> .profile-background.is-ready) {
+  color: #fff !important;
+  --profile-link-bg: rgba(255, 255, 255, 0.94);
+  --profile-link-border: rgba(255, 255, 255, 0.75);
+}
+.public-page:has(> .profile-background.is-ready) .profile-card {
+  color: inherit !important;
+}
+:is(.public-page, .profile-card):has(> .profile-background.is-ready)
+  :is(.profile-name, .profile-bio, .profile-brand, .profile-empty),
+.public-page:has(> .profile-background.is-ready)
+  :is(.public-header, .public-share-copy, .public-footer, .qr-download) {
+  opacity: 1;
+  text-shadow:
+    0 1px 4px #000b,
+    0 1px 14px #0009;
+}
+:is(.public-page, .profile-card):has(> .profile-background.is-ready) .profile-link {
+  color: #283329;
+  background: rgba(255, 255, 255, 0.94);
+  border-color: rgba(255, 255, 255, 0.75);
+  text-shadow: none;
+}
+.public-page:has(> .profile-background.is-ready) .public-share {
+  border-color: #ffffff60;
+}
+.public-page:has(> .profile-background.is-ready) .public-copy-button {
+  background: #0008;
+  border-color: #ffffff60;
+}
+.public-page:has(> .profile-background.is-ready) .public-wordmark-dot {
+  color: #d7ed9d;
+}
+.image-picker {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.image-picker legend {
+  padding: 0;
+  margin-bottom: 10px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+.image-picker-selection {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+.image-picker-preview {
+  width: 82px;
+  height: 82px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--muted);
+}
+.image-picker-background .image-picker-preview {
+  width: 110px;
+  border-radius: 9px;
+}
+.image-picker-preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.image-picker-actions {
+  min-width: 0;
+}
+.image-picker-actions p {
+  max-width: 270px;
+  margin: 7px 0 0;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.image-picker .secondary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--paper);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+}
+.image-picker-remove {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px;
+  margin-left: 4px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+}
+.image-picker-url {
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.image-picker-url summary {
+  cursor: pointer;
+  width: fit-content;
+  padding: 5px 0;
+}
+.image-picker-url label {
+  display: block;
+  margin: 8px 0 5px;
+  color: var(--text);
+}
+.image-picker-url-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.image-picker-url-row input {
+  width: 100%;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--text);
+  font-size: 12px;
+}
+.image-picker-url-row button {
+  flex-shrink: 0;
+}
+.image-picker .image-picker-error {
+  margin: 8px 0 0;
+  color: #b04435;
+  font-size: 12px;
+}
+html[data-theme='dark'] .image-picker .image-picker-error {
+  color: #ffb4a7;
+}
+.image-picker :focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 3px;
+}
+@media (max-width: 380px) {
+  .image-picker-background .image-picker-preview {
+    width: 75px;
+  }
+  .image-picker-selection {
+    gap: 10px;
+  }
+  .image-picker-remove {
+    margin-left: 0;
+  }
+}
 .visually-hidden {
   position: absolute;
   width: 1px;

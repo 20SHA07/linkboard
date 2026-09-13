@@ -9,6 +9,9 @@ const backend = vi.hoisted(() => ({
   signInWithPassword: vi.fn(),
   from: vi.fn(),
   rpc: vi.fn(),
+  storageFrom: vi.fn(),
+  upload: vi.fn(),
+  createSignedUrl: vi.fn(),
 }));
 
 vi.mock('@supabase/supabase-js', () => ({ createClient: backend.createClient }));
@@ -31,6 +34,11 @@ beforeEach(() => {
     },
     from: backend.from,
     rpc: backend.rpc,
+    storage: { from: backend.storageFrom },
+  });
+  backend.storageFrom.mockReturnValue({
+    upload: backend.upload,
+    createSignedUrl: backend.createSignedUrl,
   });
 });
 
@@ -45,6 +53,99 @@ async function configuredData() {
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'public-key-for-unit-tests');
   return import('../lib/data');
 }
+
+describe('private image storage', () => {
+  const source = `media:${testProfile.id}/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.webp`;
+  const image = () =>
+    new Blob([Buffer.from('UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA', 'base64')], {
+      type: 'image/webp',
+    });
+  it('resolves built-in media under the deployment base path', async () => {
+    vi.stubEnv('NEXT_PUBLIC_BASE_PATH', '/links');
+    const data = await import('../lib/data');
+    expect(await data.resolveImageUrl(source)).toBe(`/links/api/media/${source.slice(6)}`);
+    await expect(data.resolveImageUrl('media:../private')).rejects.toThrow(/invalid/);
+    expect(await data.resolveImageUrl('https://example.com/image.png')).toBe(
+      'https://example.com/image.png',
+    );
+  });
+  it('requests a short-lived signed URL and never replaces stored media references', async () => {
+    const data = await configuredData();
+    backend.createSignedUrl.mockResolvedValue({
+      data: { signedUrl: 'https://project.supabase.co/signed/image' },
+      error: null,
+    });
+    expect(await data.resolveImageUrl(source)).toBe('https://project.supabase.co/signed/image');
+    expect(backend.storageFrom).toHaveBeenCalledWith('linkboard-images');
+    expect(backend.createSignedUrl).toHaveBeenCalledWith(source.slice(6), 300);
+    backend.createSignedUrl.mockResolvedValue({ data: null, error: { message: 'Access denied' } });
+    await expect(data.resolveImageUrl(source)).rejects.toThrow(/unavailable/);
+  });
+  it('uploads immutable objects only into the signed-in owner folder', async () => {
+    const data = await configuredData();
+    backend.getUser.mockResolvedValue({
+      data: { user: { id: testProfile.id, email: 'owner@example.com' } },
+      error: null,
+    });
+    backend.upload.mockResolvedValue({ error: null });
+    const result = await data.uploadImage(image(), testProfile.id);
+    expect(result.startsWith(`media:${testProfile.id}/`)).toBe(true);
+    expect(backend.upload).toHaveBeenCalledWith(result.slice(6), expect.any(Blob), {
+      contentType: 'image/webp',
+      cacheControl: '60',
+      upsert: false,
+    });
+  });
+  it('rejects a changed account before uploading an image selected in the previous editor', async () => {
+    const data = await configuredData();
+    backend.getUser.mockResolvedValue({
+      data: { user: { id: '00000000-0000-4000-8000-000000000002', email: 'other@example.com' } },
+      error: null,
+    });
+    await expect(data.uploadImage(image(), testProfile.id)).rejects.toThrow(/account changed/);
+    expect(backend.upload).not.toHaveBeenCalled();
+  });
+  it('binds a built-in upload to the editor owner and refreshes auth when the session changes', async () => {
+    const dispatchEvent = vi.fn();
+    vi.stubGlobal('window', { dispatchEvent });
+    vi.stubGlobal('BroadcastChannel', undefined);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ account: { id: testProfile.id } }))
+      .mockResolvedValueOnce(
+        Response.json({ error: 'Your account changed. Reload your dashboard.' }, { status: 403 }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+    const data = await import('../lib/data');
+    await expect(data.uploadImage(image(), testProfile.id)).rejects.toThrow(/account changed/);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/media',
+      expect.objectContaining({
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'image/webp', 'X-Linkboard-Owner': testProfile.id },
+      }),
+    );
+    expect(dispatchEvent).toHaveBeenCalledOnce();
+    expect(dispatchEvent.mock.calls[0][0].type).toBe('linkboard:auth');
+  });
+  it('rejects unsafe files and unauthenticated uploads before writing', async () => {
+    const data = await configuredData();
+    await expect(
+      data.uploadImage(new Blob(['script'], { type: 'image/svg+xml' }), testProfile.id),
+    ).rejects.toThrow();
+    await expect(
+      data.uploadImage(new Blob(['fake'], { type: 'image/webp' }), testProfile.id),
+    ).rejects.toThrow();
+    await expect(
+      data.uploadImage(new Blob([new Uint8Array(2097153)], { type: 'image/webp' }), testProfile.id),
+    ).rejects.toThrow();
+    backend.getUser.mockResolvedValue({ data: { user: null }, error: null });
+    await expect(data.uploadImage(image(), testProfile.id)).rejects.toThrow(/Sign in/);
+    expect(backend.upload).not.toHaveBeenCalled();
+  });
+});
 
 describe('configuration and authentication boundaries', () => {
   it('resends signup confirmation only for a valid email and preserves the Pages redirect', async () => {

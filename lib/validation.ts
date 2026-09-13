@@ -11,6 +11,7 @@ export const platforms: readonly Platform[] = [
   'linkedin',
   'github',
   'spotify',
+  'whatsapp',
   'mail',
 ];
 export const themes: readonly Theme[] = ['sand', 'sage', 'rose', 'ink', 'custom'];
@@ -71,7 +72,19 @@ export function validateUsername(username: string): boolean {
 }
 
 export function safeAvatarUrl(url: string): boolean {
-  return url === '' || (safeUrl(url) && /^https:\/\//i.test(url));
+  return url === '' || Boolean(mediaPath(url)) || (safeUrl(url) && /^https:\/\//i.test(url));
+}
+
+/** Stored media references never accept paths, queries, or another URI scheme. */
+export function mediaPath(source: string): string | null {
+  if (typeof source !== 'string') return null;
+  const uuid = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+  return new RegExp(`^media:(${uuid}/${uuid}\\.webp)$`).exec(source)?.[1] || null;
+}
+
+function ownedImage(source: string, owner: string): boolean {
+  const path = mediaPath(source);
+  return safeAvatarUrl(source) && (!path || path.startsWith(`${owner}/`));
 }
 
 /** Validates untrusted form/storage values as well as correctly typed profiles. */
@@ -86,8 +99,44 @@ export function validateProfile(profile: Profile): string | null {
     return 'Your profile name must contain 1–60 characters.';
   if (typeof profile.bio !== 'string' || profile.bio.length > MAX_BIO_LENGTH)
     return 'Keep your bio to 280 characters or fewer.';
-  if (typeof profile.avatarUrl !== 'string' || !safeAvatarUrl(profile.avatarUrl))
-    return 'Use a valid HTTPS image URL, or leave the avatar blank.';
+  if (typeof profile.avatarUrl !== 'string' || !ownedImage(profile.avatarUrl, profile.id))
+    return 'Upload your own image, use a valid HTTPS image URL, or leave the avatar blank.';
+  if (profile.appearance !== undefined) {
+    const appearance = profile.appearance;
+    if (!appearance || typeof appearance !== 'object' || Array.isArray(appearance))
+      return 'Choose valid image settings.';
+    const fields = [
+      'backgroundImageUrl',
+      'backgroundPosition',
+      'backgroundOverlay',
+      'avatarPosition',
+      'dashboardBackground',
+    ];
+    if (Object.keys(appearance).some((key) => !fields.includes(key)))
+      return 'Choose valid image settings.';
+    if (
+      appearance.backgroundImageUrl !== undefined &&
+      (typeof appearance.backgroundImageUrl !== 'string' ||
+        !ownedImage(appearance.backgroundImageUrl, profile.id))
+    )
+      return 'Upload your own background image or enter a valid HTTPS image URL.';
+    for (const position of [appearance.backgroundPosition, appearance.avatarPosition]) {
+      if (position !== undefined && !['top', 'center', 'bottom'].includes(position))
+        return 'Choose top, center, or bottom for image positioning.';
+    }
+    if (
+      appearance.backgroundOverlay !== undefined &&
+      (!Number.isInteger(appearance.backgroundOverlay) ||
+        appearance.backgroundOverlay < 0 ||
+        appearance.backgroundOverlay > 80)
+    )
+      return 'Choose a background overlay between 0 and 80.';
+    if (
+      appearance.dashboardBackground !== undefined &&
+      typeof appearance.dashboardBackground !== 'boolean'
+    )
+      return 'Choose whether to show the image in your dashboard.';
+  }
   if (!themes.includes(profile.theme)) return 'Choose one of the available themes.';
   if (
     typeof profile.backgroundColor !== 'string' ||

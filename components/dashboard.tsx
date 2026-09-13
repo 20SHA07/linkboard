@@ -33,9 +33,20 @@ import {
 import { getCurrentUser, loadDashboard, saveProfile, signOut, subscribeAuth } from '@/lib/data';
 import { validateProfile } from '@/lib/validation';
 import { dailyClicks } from '@/lib/analytics';
+import { whatsappUrl } from '@/lib/whatsapp';
+import { useImageUrl } from '@/lib/images';
 import { publicProfileUrl, isStaticExport, confirmationFailure } from '@/lib/urls';
-import type { Account, ClickEvent, Platform, Profile, Theme } from '@/lib/types';
-import ProfileCard from './profile-card';
+import type {
+  Account,
+  ClickEvent,
+  ImagePosition,
+  Platform,
+  Profile,
+  ProfileAppearance,
+  Theme,
+} from '@/lib/types';
+import ProfileCard, { ProfileBackground } from './profile-card';
+import ImagePicker from './image-picker';
 import QRCode from './qr-code';
 import { PlatformIcon } from './icons';
 import { AnimatedBackground } from './motion/animated-background';
@@ -59,6 +70,7 @@ const platforms: { value: Platform; label: string }[] = [
   { value: 'github', label: 'GitHub' },
   { value: 'linkedin', label: 'LinkedIn' },
   { value: 'mail', label: 'Email' },
+  { value: 'whatsapp', label: 'WhatsApp' },
 ];
 const themes: { id: Theme; name: string; color: string; accent: string }[] = [
   { id: 'sand', name: 'Sunday', color: '#ede7db', accent: '#fffdf7' },
@@ -76,15 +88,17 @@ function initials(name: string) {
 }
 function Avatar({ profile, size = '' }: { profile: Profile; size?: string }) {
   const [failedUrl, setFailedUrl] = useState('');
+  const imageUrl = useImageUrl(profile.avatarUrl);
   return (
     <span className={`avatar ${size}`}>
-      {profile.avatarUrl && failedUrl !== profile.avatarUrl ? (
+      {imageUrl && failedUrl !== imageUrl ? (
         // User-provided HTTPS avatars do not require a build-time image host allowlist.
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={profile.avatarUrl}
+          src={imageUrl}
           alt=""
-          onError={() => setFailedUrl(profile.avatarUrl)}
+          onError={() => setFailedUrl(imageUrl)}
+          style={{ objectPosition: `center ${profile.appearance?.avatarPosition || 'center'}` }}
           referrerPolicy="no-referrer"
         />
       ) : (
@@ -104,6 +118,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [imageBusy, setImageBusy] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [toast, setToast] = useState('');
   const [error, setError] = useState('');
@@ -171,6 +186,7 @@ export default function Dashboard() {
       setSavedProfile(null);
       setEvents([]);
       setSaving(false);
+      setImageBusy(false);
       setRefreshing(false);
       setLoadError('');
       setError('');
@@ -238,8 +254,19 @@ export default function Dashboard() {
     setProfile((p) => (p ? { ...p, ...values } : p));
     setError('');
   }
+  function updateAppearance(values: ProfileAppearance, owner = profile?.id) {
+    setProfile((current) =>
+      current && current.id === owner
+        ? {
+            ...current,
+            appearance: { ...current.appearance, ...values },
+          }
+        : current,
+    );
+    setError('');
+  }
   async function save(published?: boolean) {
-    if (!profile || saving) return;
+    if (!profile || saving || imageBusy) return;
     const snapshot = structuredClone(profile);
     if (published !== undefined) snapshot.published = published;
     const issue = validateProfile(snapshot);
@@ -306,6 +333,13 @@ export default function Dashboard() {
   function addLink(e: React.FormEvent) {
     e.preventDefault();
     if (!profile) return;
+    const url = newLink.platform === 'whatsapp' ? whatsappUrl(newLink.url) : newLink.url.trim();
+    if (!url) {
+      setNewLinkError(
+        'Enter a WhatsApp link or a phone number with country code, such as +971 50 123 4567.',
+      );
+      return;
+    }
     const candidate = {
       ...profile,
       links: [
@@ -313,7 +347,7 @@ export default function Dashboard() {
         {
           ...newLink,
           title: newLink.title.trim(),
-          url: newLink.url.trim(),
+          url,
           id: crypto.randomUUID(),
           enabled: true,
         },
@@ -383,9 +417,20 @@ export default function Dashboard() {
     profile.links.map((l) => [l.id, events.filter((e) => e.linkId === l.id).length]),
   );
   const activeTab = navigation.find((n) => n.id === tab)?.label || 'Settings';
+  const dashboardImage =
+    profile.appearance?.backgroundImageUrl && profile.appearance.dashboardBackground !== false;
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${dashboardImage ? ' dashboard-image' : ''}`}>
+      {dashboardImage && (
+        <div className="dashboard-background profile-image-background" aria-hidden="true">
+          <ProfileBackground
+            source={profile.appearance?.backgroundImageUrl}
+            position={profile.appearance?.backgroundPosition}
+            overlay={profile.appearance?.backgroundOverlay}
+          />
+        </div>
+      )}
       <a className="skip-link" href="#main-content">
         Skip to content
       </a>
@@ -526,7 +571,7 @@ export default function Dashboard() {
             <button
               className={`button primary ${savedProfile?.published ? 'save-button' : 'publish-button'}`}
               onClick={() => void save(savedProfile?.published ? undefined : true)}
-              disabled={saving || (Boolean(savedProfile?.published) && !dirty)}
+              disabled={saving || imageBusy || (Boolean(savedProfile?.published) && !dirty)}
               title={
                 savedProfile?.published
                   ? 'Save your changes'
@@ -588,7 +633,7 @@ export default function Dashboard() {
               <div className="draft-banner">
                 <span className="status-dot" />
                 <span>Your page is private. Use Publish page above when you’re ready.</span>
-                <button onClick={() => void save(false)} disabled={saving || !dirty}>
+                <button onClick={() => void save(false)} disabled={saving || imageBusy || !dirty}>
                   Save draft <Check size={12} aria-hidden="true" />
                 </button>
               </div>
@@ -809,6 +854,69 @@ export default function Dashboard() {
               )}
               {tab === 'appearance' && (
                 <section className="settings-panel">
+                  <div className="background-editor">
+                    <div className="section-heading">
+                      <div>
+                        <h2>Make it your own</h2>
+                        <p>Add an image across your page and workspace.</p>
+                      </div>
+                    </div>
+                    <ImagePicker
+                      key={profile.id}
+                      ownerId={profile.id}
+                      kind="background"
+                      label="Background image"
+                      value={profile.appearance?.backgroundImageUrl || ''}
+                      disabled={saving}
+                      onBusyChange={setImageBusy}
+                      onChange={(backgroundImageUrl) =>
+                        updateAppearance({ backgroundImageUrl }, profile.id)
+                      }
+                    />
+                    {profile.appearance?.backgroundImageUrl && (
+                      <div className="image-settings">
+                        <label>
+                          Background position
+                          <select
+                            value={profile.appearance.backgroundPosition || 'center'}
+                            onChange={(e) =>
+                              updateAppearance({
+                                backgroundPosition: e.target.value as ImagePosition,
+                              })
+                            }
+                          >
+                            <option value="top">Top</option>
+                            <option value="center">Center</option>
+                            <option value="bottom">Bottom</option>
+                          </select>
+                        </label>
+                        <label>
+                          Background dimming{' '}
+                          <span>{profile.appearance.backgroundOverlay ?? 45}%</span>
+                          <input
+                            type="range"
+                            min="0"
+                            max="80"
+                            step="5"
+                            value={profile.appearance.backgroundOverlay ?? 45}
+                            onChange={(e) =>
+                              updateAppearance({ backgroundOverlay: Number(e.target.value) })
+                            }
+                          />
+                        </label>
+                        <label className="image-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={profile.appearance.dashboardBackground !== false}
+                            onChange={(e) =>
+                              updateAppearance({ dashboardBackground: e.target.checked })
+                            }
+                          />
+                          Show this background in my dashboard too
+                        </label>
+                      </div>
+                    )}
+                  </div>
                   <div className="section-heading">
                     <div>
                       <h2>Pick your palette</h2>
@@ -1044,19 +1152,36 @@ export default function Dashboard() {
                       A sentence or two is perfect. {profile.bio.length}/280
                     </span>
                   </label>
-                  <label>
-                    Profile image URL
-                    <input
-                      type="url"
-                      placeholder="https://example.com/your-photo.jpg"
-                      value={profile.avatarUrl}
-                      maxLength={2048}
-                      onChange={(e) => update({ avatarUrl: e.target.value })}
-                    />
-                    <span className="field-help">
-                      Use an HTTPS image URL. Leave blank for a simple initials avatar.
-                    </span>
-                  </label>
+                  <ImagePicker
+                    key={profile.id}
+                    ownerId={profile.id}
+                    label="Profile picture"
+                    kind="avatar"
+                    value={profile.avatarUrl}
+                    disabled={saving}
+                    onBusyChange={setImageBusy}
+                    onChange={(avatarUrl) => {
+                      setProfile((current) =>
+                        current?.id === profile.id ? { ...current, avatarUrl } : current,
+                      );
+                      setError('');
+                    }}
+                  />
+                  {profile.avatarUrl && (
+                    <label>
+                      Picture position
+                      <select
+                        value={profile.appearance?.avatarPosition || 'center'}
+                        onChange={(e) =>
+                          updateAppearance({ avatarPosition: e.target.value as ImagePosition })
+                        }
+                      >
+                        <option value="top">Top</option>
+                        <option value="center">Center</option>
+                        <option value="bottom">Bottom</option>
+                      </select>
+                    </label>
+                  )}
                   <label>
                     Username
                     <div className="username-input">
@@ -1092,7 +1217,11 @@ export default function Dashboard() {
                       <span />
                     </button>
                   </div>
-                  <button className="button primary" disabled={saving || !dirty} type="submit">
+                  <button
+                    className="button primary"
+                    disabled={saving || imageBusy || !dirty}
+                    type="submit"
+                  >
                     {saving ? 'Saving…' : 'Save profile'}
                     <Check size={16} />
                   </button>
@@ -1218,14 +1347,23 @@ export default function Dashboard() {
               />
             </label>
             <label>
-              URL
+              {newLink.platform === 'whatsapp' ? 'WhatsApp number or link' : 'URL'}
               <input
                 required
                 maxLength={2048}
-                placeholder="https://example.com"
+                placeholder={
+                  newLink.platform === 'whatsapp'
+                    ? '+971 50 123 4567 or https://wa.me/…'
+                    : 'https://example.com'
+                }
                 value={newLink.url}
                 onChange={(e) => setNewLink((n) => ({ ...n, url: e.target.value }))}
               />
+              {newLink.platform === 'whatsapp' && (
+                <span className="field-help">
+                  Include your country code. We’ll create the chat link for you.
+                </span>
+              )}
             </label>
             <label>
               Platform

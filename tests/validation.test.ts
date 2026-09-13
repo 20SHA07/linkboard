@@ -87,6 +87,39 @@ describe('email validation', () => {
 });
 
 describe('profile validation', () => {
+  it('accepts owned uploaded pictures, background settings, and WhatsApp links', () => {
+    const saved = profile();
+    const source = `media:${saved.id}/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.webp`;
+    saved.avatarUrl = source;
+    saved.appearance = {
+      backgroundImageUrl: source,
+      backgroundPosition: 'top',
+      avatarPosition: 'bottom',
+      backgroundOverlay: 45,
+      dashboardBackground: true,
+    };
+    saved.links[0] = { ...saved.links[0], platform: 'whatsapp', url: 'https://wa.me/971501234567' };
+    expect(validateProfile(saved)).toBeNull();
+  });
+  it('rejects another account’s media and malformed image settings', () => {
+    const source =
+      'media:00000000-0000-4000-8000-000000000002/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.webp';
+    expect(validateProfile(profile({ avatarUrl: source }))).toEqual(expect.any(String));
+    for (const appearance of [
+      { backgroundImageUrl: source },
+      { backgroundImageUrl: 'data:image/png;base64,x' },
+      { backgroundOverlay: 81 },
+      { backgroundOverlay: -1 },
+      { backgroundOverlay: 0.5 },
+      { backgroundPosition: 'left' },
+      { dashboardBackground: 'yes' },
+      { unknown: true },
+    ]) {
+      expect(validateProfile(profile({ appearance } as unknown as Partial<Profile>))).toEqual(
+        expect.any(String),
+      );
+    }
+  });
   it('accepts a complete profile and a valid empty draft', () => {
     expect(validateProfile(profile())).toBeNull();
     expect(

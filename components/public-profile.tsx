@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { ArrowUpRight, Check, Copy, Link2, RefreshCw } from 'lucide-react';
 import { getPublicProfile, trackClick } from '@/lib/data';
 import type { Profile } from '@/lib/types';
-import ProfileCard, { profileThemeStyle } from '@/components/profile-card';
+import ProfileCard, { ProfileBackground, profileThemeStyle } from '@/components/profile-card';
 import QRCode from '@/components/qr-code';
 import { publicProfileUrl } from '@/lib/urls';
 
@@ -66,7 +66,15 @@ export default function PublicProfile({ username }: { username: string }) {
   const background = profile ? profileThemeStyle(profile) : undefined;
 
   return (
-    <div className={`public-page theme-${profile?.theme || 'sand'}`} style={background}>
+    <div
+      className={`public-page profile-image-background theme-${profile?.theme || 'sand'}`}
+      style={background}
+    >
+      <ProfileBackground
+        source={profile?.appearance?.backgroundImageUrl}
+        position={profile?.appearance?.backgroundPosition}
+        overlay={profile?.appearance?.backgroundOverlay}
+      />
       <header className="public-header">
         <Link href="/" className="public-wordmark">
           <Link2 size={23} strokeWidth={2.3} aria-hidden="true" />
@@ -113,6 +121,7 @@ export default function PublicProfile({ username }: { username: string }) {
           <>
             <ProfileCard
               profile={profile}
+              backgroundHandled
               onLinkClick={(linkId) => {
                 void trackClick(profile.id, linkId).catch(() => {
                   /* Navigation remains available when analytics is offline. */

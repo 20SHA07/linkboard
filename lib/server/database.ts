@@ -54,13 +54,20 @@ export function getDatabase(filename = databasePath()): DatabaseSync {
       ) STRICT;
       CREATE INDEX IF NOT EXISTS clicks_profile_time
         ON click_events(profile_id, occurred_at, id);
+      CREATE TABLE IF NOT EXISTS media (
+        owner_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+        filename TEXT NOT NULL,
+        content BLOB NOT NULL CHECK(length(content) BETWEEN 20 AND 2097152),
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY(owner_id, filename)
+      ) STRICT;
       CREATE TABLE IF NOT EXISTS rate_limits (
         key TEXT PRIMARY KEY,
         count INTEGER NOT NULL,
         expires_at INTEGER NOT NULL
       ) STRICT;
       CREATE INDEX IF NOT EXISTS limits_expiry ON rate_limits(expires_at);
-      PRAGMA user_version = 1;
+      PRAGMA user_version = 2;
     `);
     databases.set(path, database);
     return database;

@@ -224,6 +224,27 @@ export class BuiltinStore {
       avatarUrl: canonicalUrl(input.avatarUrl),
       theme: input.theme,
       backgroundColor: input.backgroundColor,
+      ...(input.appearance
+        ? {
+            appearance: {
+              ...(input.appearance.backgroundImageUrl !== undefined
+                ? { backgroundImageUrl: canonicalUrl(input.appearance.backgroundImageUrl) }
+                : {}),
+              ...(input.appearance.backgroundPosition !== undefined
+                ? { backgroundPosition: input.appearance.backgroundPosition }
+                : {}),
+              ...(input.appearance.backgroundOverlay !== undefined
+                ? { backgroundOverlay: input.appearance.backgroundOverlay }
+                : {}),
+              ...(input.appearance.avatarPosition !== undefined
+                ? { avatarPosition: input.appearance.avatarPosition }
+                : {}),
+              ...(input.appearance.dashboardBackground !== undefined
+                ? { dashboardBackground: input.appearance.dashboardBackground }
+                : {}),
+            },
+          }
+        : {}),
       published: input.published,
       links: input.links.map((link) => ({
         id: link.id,

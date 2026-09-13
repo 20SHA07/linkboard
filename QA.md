@@ -4,16 +4,16 @@ This review covered the dashboard, authentication, profile publishing, public li
 
 ## Bugs fixed
 
-| Problem | Result |
-| --- | --- |
-| Hosted requests could wait indefinitely on a stalled connection. | Supabase requests now have a timeout, preserve cancellation, and show actionable feedback. |
-| Browsers blocking BroadcastChannel could report a successful sign-in as a failure. | Cross-tab notifications are optional; focus-based session checks remain available. |
-| Middle-button navigation was missing from analytics. | Middle-clicks count once; right-click menus do not increment counts. |
-| Expired email-confirmation links lost their error during the login redirect. | A safe error marker survives the redirect, and a manual resend action validates the email and uses a cooldown. |
-| Analytics totals used a rolling time window while the chart used calendar days. | Both use the same local calendar-day boundaries; future or invalid timestamps are excluded from the chart. |
-| An unfinished add-link dialog could survive a change of account. | Account changes clear dialogs, pending link fields, errors, and private data. In-flight results remain guarded against account changes. |
-| Docker did not receive the configured base path at build time. | Docker and Compose now pass `NEXT_PUBLIC_BASE_PATH`, preserving prefixed routes and share URLs. |
-| Supabase rejected valid fully qualified hostnames accepted by the form. | A narrow, repeatable migration accepts a trailing DNS root dot and retains URL safety checks and ownership restrictions. Applied to the configured project. |
+| Problem                                                                            | Result                                                                                                                                                      |
+| ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Hosted requests could wait indefinitely on a stalled connection.                   | Supabase requests now have a timeout, preserve cancellation, and show actionable feedback.                                                                  |
+| Browsers blocking BroadcastChannel could report a successful sign-in as a failure. | Cross-tab notifications are optional; focus-based session checks remain available.                                                                          |
+| Middle-button navigation was missing from analytics.                               | Middle-clicks count once; right-click menus do not increment counts.                                                                                        |
+| Expired email-confirmation links lost their error during the login redirect.       | A safe error marker survives the redirect, and a manual resend action validates the email and uses a cooldown.                                              |
+| Analytics totals used a rolling time window while the chart used calendar days.    | Both use the same local calendar-day boundaries; future or invalid timestamps are excluded from the chart.                                                  |
+| An unfinished add-link dialog could survive a change of account.                   | Account changes clear dialogs, pending link fields, errors, and private data. In-flight results remain guarded against account changes.                     |
+| Docker did not receive the configured base path at build time.                     | Docker and Compose now pass `NEXT_PUBLIC_BASE_PATH`, preserving prefixed routes and share URLs.                                                             |
+| Supabase rejected valid fully qualified hostnames accepted by the form.            | A narrow, repeatable migration accepts a trailing DNS root dot and retains URL safety checks and ownership restrictions. Applied to the configured project. |
 
 ## Verification results
 
@@ -30,3 +30,13 @@ This review covered the dashboard, authentication, profile publishing, public li
 Public registration still needs a configured SMTP sender. Email verification remains enabled. Delivery to arbitrary new users cannot be verified until the sender is connected; no verification settings were weakened and no test emails were sent to real users.
 
 Docker configuration was reviewed, but a container could not be run because Docker is unavailable in this environment. QR image generation and URLs were inspected; a physical-device scan was not performed. This review is not a guarantee against every possible browser, traffic pattern, or future dependency vulnerability.
+
+## Image uploads and WhatsApp update — 13 September 2026
+
+- Added device uploads for profile pictures and backgrounds, framing controls, background dimming, and an optional dashboard background. WhatsApp links accept international phone numbers or existing WhatsApp HTTPS links.
+- 259 automated tests passed. Coverage includes image headers and dimensions, upload limits, account switching during uploads, private image ownership, publication visibility, Supabase RLS, and repeatable migration upgrades.
+- ESLint, TypeScript, the production server build, and the configured GitHub Pages export passed.
+- Production HTTP checks passed for image upload authentication, owner-header mismatches, unpublished/private reads, published reads, removal and unpublishing, persistence across restart, and existing account/link behavior.
+- Browser checks with disposable local accounts verified PNG uploads and resizing, replacement, invalid-file feedback without losing the saved image, background position, the dashboard checkbox, saving and public rendering, WhatsApp number conversion, and readable dark-mode controls. The image editor fit a 375-pixel viewport without horizontal overflow.
+
+Live activation is pending: the Supabase browser connection timed out, so `202609130002_profile_images.sql` has not been applied to the hosted project. The new frontend must not replace the live Pages deployment until this migration succeeds. The code and migration are available for review on the development branch.

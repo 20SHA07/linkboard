@@ -106,5 +106,138 @@ end;
 $$;
 reset role;
 
+-- Upload fixtures contain metadata only. Storage's HTTP service enforces the
+-- bucket's upload size and allowed content-type restrictions.
+insert into storage.objects (bucket_id, name) values
+  ('linkboard-images', 'a1111111-1111-4111-8111-111111111111/11111111-1111-4111-8111-111111111111.webp'),
+  ('linkboard-images', 'a1111111-1111-4111-8111-111111111111/22222222-2222-4222-8222-222222222222.webp'),
+  ('linkboard-images', 'a1111111-1111-4111-8111-111111111111/33333333-3333-4333-8333-333333333333.webp'),
+  ('linkboard-images', 'b2222222-2222-4222-8222-222222222222/11111111-1111-4111-8111-111111111111.webp');
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'a1111111-1111-4111-8111-111111111111', true);
+select set_config('request.jwt.claims', '{"sub":"a1111111-1111-4111-8111-111111111111","role":"authenticated"}', true);
+update public.profiles set
+  avatar_url = 'media:a1111111-1111-4111-8111-111111111111/11111111-1111-4111-8111-111111111111.webp',
+  appearance = '{"backgroundImageUrl":"media:a1111111-1111-4111-8111-111111111111/22222222-2222-4222-8222-222222222222.webp","backgroundPosition":"center","avatarPosition":"top","backgroundOverlay":40,"dashboardBackground":true}',
+  links = '[{"id":"whatsapp","title":"WhatsApp","url":"https://wa.me/971501234567","platform":"whatsapp","enabled":true}]'
+where id = 'a1111111-1111-4111-8111-111111111111';
+-- Older clients that omit appearance in a PATCH retain the saved background.
+update public.profiles set bio = 'An existing client edit' where id = 'a1111111-1111-4111-8111-111111111111';
+
+do $$
+declare touched integer;
+begin
+  if (select appearance ->> 'backgroundOverlay' from public.profiles) is distinct from '40' then
+    raise exception 'FAIL: An unrelated profile edit erased appearance';
+  end if;
+  insert into storage.objects (bucket_id, name) values
+    ('linkboard-images', 'a1111111-1111-4111-8111-111111111111/44444444-4444-4444-8444-444444444444.webp');
+  begin
+    insert into storage.objects (bucket_id, name) values
+      ('linkboard-images', 'b2222222-2222-4222-8222-222222222222/44444444-4444-4444-8444-444444444444.webp');
+    raise exception 'FAIL: Owner A uploaded into owner B folder';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into storage.objects (bucket_id, name) values
+      ('linkboard-images', 'a1111111-1111-4111-8111-111111111111/../../image.svg');
+    raise exception 'FAIL: Unsafe uploaded path accepted';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    update public.profiles set avatar_url = 'media:b2222222-2222-4222-8222-222222222222/11111111-1111-4111-8111-111111111111.webp'
+      where id = 'a1111111-1111-4111-8111-111111111111';
+    raise exception 'FAIL: Owner A referenced owner B private avatar';
+  exception when check_violation then null;
+  end;
+  begin
+    update public.profiles set appearance = '{"backgroundImageUrl":"media:b2222222-2222-4222-8222-222222222222/11111111-1111-4111-8111-111111111111.webp"}'
+      where id = 'a1111111-1111-4111-8111-111111111111';
+    raise exception 'FAIL: Owner A referenced owner B private background';
+  exception when check_violation then null;
+  end;
+  update storage.objects set metadata = '{"changed":true}' where bucket_id = 'linkboard-images';
+  get diagnostics touched = row_count;
+  if touched <> 0 then raise exception 'FAIL: Uploaded objects can be overwritten'; end if;
+  delete from storage.objects where name = 'a1111111-1111-4111-8111-111111111111/11111111-1111-4111-8111-111111111111.webp';
+  get diagnostics touched = row_count;
+  if touched <> 0 then raise exception 'FAIL: An image still saved on a profile can be deleted'; end if;
+  delete from storage.objects where name = 'a1111111-1111-4111-8111-111111111111/44444444-4444-4444-8444-444444444444.webp';
+  get diagnostics touched = row_count;
+  if touched <> 1 then raise exception 'FAIL: Owner cannot delete an unused upload'; end if;
+end;
+$$;
+reset role;
+
+set local role anon;
+select set_config('request.jwt.claim.sub', '', true);
+select set_config('request.jwt.claims', '{"role":"anon"}', true);
+select set_config('storage.operation', 'storage.object.sign', true);
+do $$
+declare profile jsonb;
+begin
+  if (select count(*) from storage.objects) <> 2 then raise exception 'FAIL: Anonymous signing must allow exactly the two published image references'; end if;
+  profile := public.get_public_profile('rls-user-a');
+  if profile -> 'appearance' ->> 'avatarPosition' is distinct from 'top' then raise exception 'FAIL: Public appearance missing'; end if;
+  if profile -> 'links' -> 0 ->> 'platform' is distinct from 'whatsapp' then raise exception 'FAIL: WhatsApp link missing'; end if;
+  begin
+    insert into storage.objects (bucket_id, name) values
+      ('linkboard-images', 'a1111111-1111-4111-8111-111111111111/55555555-5555-4555-8555-555555555555.webp');
+    raise exception 'FAIL: Anonymous visitor uploaded an image';
+  exception when insufficient_privilege then null;
+  end;
+end;
+$$;
+select set_config('storage.operation', 'storage.object.get_authenticated', true);
+do $$ begin
+  if (select count(*) from storage.objects) <> 2 then raise exception 'FAIL: Published image downloads unavailable'; end if;
+end; $$;
+select set_config('storage.operation', 'storage.object.list', true);
+do $$ begin
+  if (select count(*) from storage.objects) <> 0 then raise exception 'FAIL: Anonymous visitor can enumerate stored images'; end if;
+end; $$;
+reset role;
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'b2222222-2222-4222-8222-222222222222', true);
+select set_config('request.jwt.claims', '{"sub":"b2222222-2222-4222-8222-222222222222","role":"authenticated"}', true);
+do $$ begin
+  if (select count(*) from storage.objects) <> 1 then raise exception 'FAIL: Owner B listing includes another owner images'; end if;
+end; $$;
+select set_config('storage.operation', 'storage.object.sign_many', true);
+do $$ begin
+  if (select count(*) from storage.objects) <> 3 then raise exception 'FAIL: Owner B cannot access only own uploads and published references'; end if;
+end; $$;
+reset role;
+
+-- Unpublishing revokes future signed URL creation for all the profile images.
+-- Existing signed URLs remain usable until their short expiration time.
+update public.profiles set published = false where id = 'a1111111-1111-4111-8111-111111111111';
+set local role anon;
+select set_config('request.jwt.claim.sub', '', true);
+select set_config('request.jwt.claims', '{"role":"anon"}', true);
+do $$ begin
+  if (select count(*) from storage.objects) <> 0 then raise exception 'FAIL: Unpublishing did not revoke image access'; end if;
+end; $$;
+reset role;
+
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'a1111111-1111-4111-8111-111111111111', true);
+select set_config('request.jwt.claims', '{"sub":"a1111111-1111-4111-8111-111111111111","role":"authenticated"}', true);
+do $$ begin
+  if (select count(*) from storage.objects) <> 3 then raise exception 'FAIL: Owner lost draft image access'; end if;
+end; $$;
+update public.profiles set avatar_url = '', published = true where id = 'a1111111-1111-4111-8111-111111111111';
+delete from storage.objects where name = 'a1111111-1111-4111-8111-111111111111/11111111-1111-4111-8111-111111111111.webp';
+reset role;
+set local role anon;
+select set_config('request.jwt.claim.sub', '', true);
+select set_config('request.jwt.claims', '{"role":"anon"}', true);
+do $$ begin
+  if (select count(*) from storage.objects) <> 1 then raise exception 'FAIL: Removing an avatar left it publicly accessible'; end if;
+end; $$;
+reset role;
+
 rollback;
 select 'PASS: All Linkboard database authorization tests passed; fixtures rolled back.' as result;

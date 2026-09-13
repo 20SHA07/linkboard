@@ -1,6 +1,6 @@
 # Linkboard
 
-A self-hostable link-in-bio application built with Next.js, React, TypeScript, SQLite, and the open-source `qrcode` library. Create an account, customize a profile through the dashboard, and publish its personal public address. Each user has a separate profile, links, theme, and private click analytics.
+A self-hostable link-in-bio application built with Next.js, React, TypeScript, SQLite, and the open-source `qrcode` library. Create an account, customize a profile through the dashboard, and publish its personal public address. Each user has a separate profile, links, uploaded profile picture and background, theme, and private click analytics.
 
 The default server installation includes real authentication and a persistent SQLite database. It starts with no accounts or sample profiles. Supabase supports GitHub Pages, serverless hosting, and deployments that prefer managed authentication and Postgres. On GitHub Pages, an installation guide is visible until Supabase is connected; account creation, saved profiles, and analytics become available after configuration and redeployment.
 
@@ -19,7 +19,7 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000), choose **Create account**, and register with your email address and a password of 12–128 characters. Your new profile starts unpublished, with no links, biography, or image. Registration signs you in so you can customize it and publish when ready.
 
-No external service or environment configuration is required for this local installation. The server creates `data/linkboard.sqlite` automatically. Accounts, profiles, sessions, and clicks persist across browser sessions and application restarts. Use a different email address to create another account; every account has its own dashboard.
+No external service or environment configuration is required for this local installation. The server creates `data/linkboard.sqlite` automatically. Accounts, profiles, uploaded images, sessions, and clicks persist across browser sessions and application restarts. Use a different email address to create another account; every account has its own dashboard.
 
 | Command               | Purpose                                          |
 | --------------------- | ------------------------------------------------ |
@@ -34,15 +34,29 @@ No external service or environment configuration is required for this local inst
 
 ## Customize your profile
 
-Open the dashboard at `/` after signing in. **Edit profile** lets you change your display name, biography, HTTPS image URL, and username. A blank or unavailable image uses an initials avatar. Usernames are unique within your installation and use 3–30 lowercase letters, digits, and single hyphens.
+Open the dashboard at `/` after signing in. **Edit profile** lets you change your display name, biography, profile picture, and username. Choose **Upload image** to select a picture from your device, **Replace image** to change it, or **Remove** to return to an initials avatar. You can also expand **Use an image URL instead** and paste a directly accessible HTTPS image URL. Set the picture's position to **Top**, **Center**, or **Bottom** to keep the right part visible in its circular frame. A blank or unavailable picture uses an initials avatar. Usernames are unique within your installation and use 3–30 lowercase letters, digits, and single hyphens.
 
-Use **My links** to add destinations, edit labels and URLs, choose a social platform, change the order, and enable or disable individual links. Supported platforms include Instagram, X/Twitter, TikTok, YouTube, LinkedIn, GitHub, Spotify, websites, and email. A profile supports up to 30 links.
+Use **My links** to add destinations, edit labels and URLs, choose a social platform, change the order, and enable or disable individual links. Supported platforms include WhatsApp, Instagram, X/Twitter, TikTok, YouTube, LinkedIn, GitHub, Spotify, websites, and email. A profile supports up to 30 links.
 
-Use **Appearance** to select a theme or custom background color. The live preview shows your pending edits. For a private profile, choose **Save draft** to keep your work private, or **Publish page** in the sticky top bar to save your edits and make the page public. After publishing, use **Save changes** for updates and **View page** to visit your public address. You can make it private again with the publication switch in Settings and save. Visitors receive only published profiles and enabled links.
+When adding a link, choose **WhatsApp** and enter either a phone number with its country code, such as `+971 50 123 4567`, or an HTTPS `wa.me`/`whatsapp.com` link. Phone numbers become a `https://wa.me/971501234567` destination automatically; spaces, parentheses, and hyphens are removed. Use the international number without a local trunk prefix. Existing WhatsApp chat, group, and channel links can be pasted directly. Edit its label and resulting URL in **My links**. WhatsApp clicks appear in Analytics like other social links.
+
+Use **Appearance → Background image** to upload, replace, remove, or link an image that covers the full public page and its mobile preview. Choose **Background position** to anchor the crop at the top, center, or bottom, and adjust **Background dimming** from 0–80% to suit the image. **Show this background in my dashboard too** is enabled by default; clear it to keep the image only on your public profile. This uses the same image, position, and dimming in your own dashboard. Themes and custom background colors remain available and provide a fallback when an image is absent or cannot load.
+
+The live preview shows your pending edits. Uploading a file prepares it for use; it does not publish or save the profile by itself. Wait for an upload to finish, then choose **Save draft** to keep a private profile private, or **Publish page** in the sticky top bar to save your edits and make it public. After publishing, use **Save changes** for updates and **View page** to visit your public address. You can make it private again with the publication switch in Settings and save. Visitors receive only published profiles and enabled links.
 
 The interface theme control offers **Light**, **Dark**, and **System**. System follows your device preference. The choice is saved in this browser under `linkboard.theme`; it contains only a display preference. Your public profile's background and theme remain controlled by the profile owner through **Appearance**.
 
-Link destinations accept absolute `https://` or `http://` URLs and single-address `mailto:` URLs without extra parameters. Scripts, embedded data, relative destinations, credential-bearing URLs, and malformed input are rejected by validation. Avatar URLs must use HTTPS. Images are loaded from the host you supply, which receives normal image requests from visitors.
+Link destinations accept absolute `https://` or `http://` URLs and single-address `mailto:` URLs without extra parameters. Scripts, embedded data, relative destinations, credential-bearing URLs, and malformed input are rejected by validation. External picture and background URLs must use HTTPS. These images load from the supplied host, which receives normal image requests from visitors; Linkboard cannot apply its upload privacy rules to externally hosted files.
+
+### Image formats, limits, and privacy
+
+Device uploads accept **JPEG, PNG, and WebP up to 10 MiB**. Images must be at most 40 megapixels, with neither dimension above 16,384 pixels. The browser resizes pictures to a maximum 768-pixel longest edge and backgrounds to 1,920 pixels, preserving their aspect ratio. It re-encodes them as still WebP images, strips embedded metadata, and requires the result to fit within **2 MiB**. Unsupported, damaged, or oversized files show an error without replacing your saved image. SVG, GIF, and HEIC uploads are not supported; convert them to a supported format first.
+
+Uploaded files are owned by the signed-in account. Other users cannot upload into that account's folder or save references to its private uploads. Visitors can access an upload only when the owner's published profile currently uses it as the profile picture or background. An upload that has not been saved onto a published profile remains private.
+
+The built-in SQLite backend stores the image bytes in the existing database and limits each account to **50 MiB of uploaded images**. Reads check current ownership and publication on every request. Supabase stores uploads in the **private** `linkboard-images` bucket, with the same 2 MiB per-file limit; Supabase's project storage and bandwidth quotas apply instead of the built-in per-account quota. Do not make this bucket public. The application requests signed image URLs that expire after **five minutes** and refreshes them while a page stays open. Unpublishing or removing an image prevents new visitor URLs from being issued; a previously issued URL may remain usable until it expires. Public bucket listing and overwriting uploaded objects are denied. See [Supabase private bucket access](https://supabase.com/docs/guides/storage/buckets/fundamentals) and [Storage access policies](https://supabase.com/docs/guides/storage/security/access-control).
+
+**Remove** clears the profile's image choice when you save; replacing or removing an image does not automatically erase the original upload from storage. Unused uploads still count toward storage usage. If storage fills up, ask the installation administrator to review unused uploads; keep the database and Storage policies intact when maintaining files.
 
 ## Share the page and QR code
 
@@ -58,13 +72,13 @@ In a normal server build with all Supabase variables empty, Linkboard uses its o
 
 Passwords are stored as salted scrypt hashes. A successful login creates a random session token; the database stores a hash of the token. The browser receives an `HttpOnly`, `SameSite=Lax` session cookie with a 30-day expiry. Cookies are also `Secure` when the configured site origin or direct request uses HTTPS. Signing out revokes the session. Authenticated API operations derive ownership from the session, so supplying another user's profile ID does not grant access to that profile or its analytics.
 
-**Set `NEXT_PUBLIC_SITE_URL` to the deployed HTTPS origin when serving behind a TLS reverse proxy.** The application does not trust arbitrary forwarded headers to determine a secure origin. State-changing requests require the same origin and JSON bodies are limited to 96 KiB.
+**Set `NEXT_PUBLIC_SITE_URL` to the deployed HTTPS origin when serving behind a TLS reverse proxy.** The application does not trust arbitrary forwarded headers to determine a secure origin. State-changing requests require the same origin. Profile/auth JSON bodies are limited to 96 KiB; image uploads use a separate authenticated endpoint with a 2 MiB streamed-body limit.
 
 This authentication provider uses email as a login identifier. It does not send confirmation emails and does not include a password-reset or account-recovery flow. Keep access credentials safe. If verified email and managed recovery are required, use Supabase and configure its email delivery and recovery handling.
 
 Basic database-backed throttles limit login attempts per email and globally, registrations per email and globally, and public clicks per link and profile. These limits protect a small installation from straightforward abuse; they are not a full bot-detection system. A heavily used deployment may need tuned limits and gateway controls.
 
-Profiles and click history are stored on the server. Every user registers a separate account.
+Profiles, uploaded image bytes, and click history are stored on the server. Every user registers a separate account.
 
 ### Storage, backups, and scaling
 
@@ -79,7 +93,7 @@ Run the built-in database with a single application instance on persistent stora
 Supabase provides shared Postgres storage and managed authentication. It is the required account backend for GitHub Pages, Vercel, and Netlify. Switching providers selects a different account database; existing SQLite users and profiles are not migrated automatically. For this repository's Pages site, follow the complete [GitHub Pages instructions](#github-pages-deployment) below.
 
 1. Create a Supabase project, or run your own Supabase instance.
-2. Run the entire [`supabase/schema.sql`](supabase/schema.sql) in its SQL editor before registering users. This creates the profiles, click events, constraints, RLS policies, and restricted public functions. Keep the `private` schema out of Supabase's exposed API schemas.
+2. Run the entire [`supabase/schema.sql`](supabase/schema.sql) in its SQL editor before registering users. This creates the profiles, click events, constraints, private image bucket, RLS policies, and restricted public functions. Keep the `private` schema out of Supabase's exposed API schemas and the `linkboard-images` bucket private.
 3. Copy [`.env.example`](.env.example) to `.env.local`. Set `NEXT_PUBLIC_SUPABASE_URL` and one public key: `NEXT_PUBLIC_SUPABASE_ANON_KEY` or `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. If both keys are present, the publishable-key value takes precedence. Never use a service-role or secret key in browser configuration.
 4. Set `NEXT_PUBLIC_SITE_URL` to the final production origin. In Supabase **Authentication → URL Configuration**, set **Site URL** to the app's root URL, including its project path when applicable. Allow `http://localhost:3000/`, `http://localhost:3000/login`, and your production app-root/login URLs. Signup confirmation returns to the app's root, including `NEXT_PUBLIC_BASE_PATH`. Allow preview patterns only for deployments you control. The exact GitHub Pages addresses appear below. See [Supabase redirect configuration](https://supabase.com/docs/guides/auth/redirect-urls).
 5. Enable email/password authentication. Keep email confirmation enabled for public registration, and configure a custom SMTP sender in Supabase. Its default sender is limited to project-team addresses and a very small hourly quota; see [Supabase SMTP requirements](https://supabase.com/docs/guides/auth/auth-smtp).
@@ -91,7 +105,9 @@ The Supabase client manages its browser session and refresh tokens. The built-in
 
 If a confirmation link expires, the sign-in page explains the problem. Enter your email and choose **Resend confirmation email** to request another link. The button waits one minute between requests, and Supabase/SMTP limits still apply. Emails are sent only after you request them.
 
-For existing installations, apply new files in [`supabase/migrations/`](supabase/migrations/) in filename order. The initial schema already includes these fixes for new installations. The `202609130001` migration accepts valid URLs with a trailing DNS root dot and preserves account data and ownership policies.
+For existing installations, apply new files in [`supabase/migrations/`](supabase/migrations/) in filename order. **Before deploying this image-enabled version to an existing Supabase project, run [`202609130002_profile_images.sql`](supabase/migrations/202609130002_profile_images.sql) in its SQL editor, from `begin;` through `commit;`, and confirm it succeeds.** It adds profile appearance fields, WhatsApp validation, the private `linkboard-images` bucket, and image access policies while preserving existing accounts and profiles. Then deploy the new frontend. The migration is safe to run again; an older frontend that omits the new appearance field does not erase it.
+
+The initial schema already includes the migrations for new installations. The preceding `202609130001` migration accepts valid URLs with a trailing DNS root dot. Image policies use Supabase Storage's `storage.allow_any_operation(text[])` helper to distinguish downloads from bucket listings; a self-hosted Supabase instance must include this helper before running setup. A database migration is an administrator action performed once per installation, not something each user needs to do.
 
 `NEXT_PUBLIC_` values are embedded in the browser bundle at build time. Changing them only when an already-built container starts will not reconfigure the frontend; rebuild after changing providers or the canonical URL. See [Next.js environment variables](https://nextjs.org/docs/pages/guides/environment-variables).
 
@@ -145,7 +161,7 @@ Netlify's free plan has a hard monthly usage limit that can pause sites when rea
 
 ## GitHub Pages deployment
 
-The public site is [https://20sha07.github.io/linkboard/](https://20sha07.github.io/linkboard/). GitHub Pages serves the application, styles, fonts, images, and JavaScript. Supabase supplies authentication, profile storage, and click analytics. This deployment does not need Vercel, Netlify, a running local computer, a separate Node server, or a custom domain.
+The public site is [https://20sha07.github.io/linkboard/](https://20sha07.github.io/linkboard/). GitHub Pages serves the application, styles, fonts, bundled images, and JavaScript. Supabase supplies authentication, profile data, uploaded image storage, and click analytics. This deployment does not need Vercel, Netlify, a running local computer, a separate Node server, or a custom domain.
 
 With no Supabase configuration, the deployed application displays an installation guide with dark mode and setup links. It does not accept credentials or create local/sample accounts. Follow these steps to activate the account dashboard and public profiles. Completing setup once serves all users; each person then registers their own account.
 
@@ -161,10 +177,10 @@ See the official [project and database setup guide](https://supabase.com/docs/gu
 
 1. Open the repository's [`supabase/schema.sql`](https://github.com/20SHA07/linkboard/blob/main/supabase/schema.sql). Use **Copy raw file** to copy the entire SQL file.
 2. In your Supabase project, open **SQL Editor**, create a **New query**, paste the SQL, and click **Run**. Run the complete file, from `begin;` through `commit;`, before creating any Linkboard accounts.
-3. Confirm the query finishes without errors. It creates the profile and click tables, the account-to-profile trigger, validation, and Row Level Security (RLS) rules. These rules keep each user's private data separate; leave them enabled.
+3. Confirm the query finishes without errors. It creates the profile and click tables, private `linkboard-images` storage bucket, account-to-profile trigger, validation, and Row Level Security (RLS) rules. These rules keep each user's private data separate; leave them enabled.
 4. Ensure the project's **Data API** is enabled and its exposed schemas include `public`. Keep `private` out of the exposed schemas. If the Data API was disabled at project creation, enable it under **Integrations → Data API**. The supplied SQL grants the necessary access; you do not need to make the tables publicly readable.
 
-No storage bucket or file-upload service is required. The avatar field uses a directly accessible HTTPS image URL and falls back to initials when the image cannot load.
+The SQL provisions image storage automatically; no separate upload service or public bucket is needed. In **Storage**, confirm `linkboard-images` is **private**, permits `image/webp`, and has a 2 MiB file-size limit. If this project already ran an older Linkboard schema, apply the [image migration](supabase/migrations/202609130002_profile_images.sql) before deploying the new frontend. User accounts and their saved profiles are preserved.
 
 ### 3. Configure email login and confirmation
 
@@ -214,7 +230,7 @@ The [Pages workflow](.github/workflows/pages.yml) publishes an installation guid
 ### 6. Create users, publish profiles, and verify sharing
 
 1. Open [Create account / Sign in](https://20sha07.github.io/linkboard/login/), choose **Create account**, and register with your email and a password of 12–128 characters. Confirm the email if required, then sign in.
-2. Use **Edit profile**, **My links**, and **Appearance** to set your name, biography, avatar URL, links, and background. Select **Save draft** to save while keeping your page private.
+2. Use **Edit profile**, **My links**, and **Appearance** to set your name, biography, uploaded profile picture, social links including WhatsApp, and background image or color. Enable **Show this background in my dashboard too** if desired. Select **Save draft** to save while keeping your page private.
 3. Select **Publish page** in the top bar, then **View page**. The app creates your address automatically, such as `/linkboard/u/?username=your-name`.
 4. Open that address while signed out, click a social link, then return to **Analytics** in your dashboard and refresh. Download the PNG in **QR code** and scan it from a second device to check the final deployed address.
 5. Another person repeats account registration with a different email. They receive a separate unpublished profile and private dashboard; you do not create another Supabase project or edit JSON for them.
@@ -257,13 +273,13 @@ npm run build
 npm run test:http
 ```
 
-The test suite includes input validation, data access/authentication behavior, and database authorization checks. The HTTP check starts the production server with an isolated temporary SQLite database and verifies registration, login, private profiles, account isolation, click tracking, session revocation, and persistence after a server restart. It removes its temporary database afterward and does not use your installation's accounts or data.
+The test suite includes input and image validation, WhatsApp URL handling, data access/authentication behavior, and database authorization checks. The HTTP check starts the production server with an isolated temporary SQLite database and verifies registration, login, private profiles, uploaded image access, account isolation, click tracking, session revocation, and persistence after a server restart. It removes its temporary database afterward and does not use your installation's accounts or data.
 
 For manual visual checks, run `npm run test:http -- --review` in an interactive terminal. After the HTTP checks pass, it prints the temporary account's local URL and generated login credentials. Press Enter when finished to stop that test server and delete its database.
 
-Supabase SQL checks run in an isolated [PGlite](https://pglite.dev) PostgreSQL environment with substitutes for the managed auth table and helper. They do not test Supabase Auth, SMTP, PostgREST, or your deployed configuration.
+Supabase SQL checks run in an isolated [PGlite](https://pglite.dev) PostgreSQL environment with substitutes for the managed auth/Storage tables and helpers. They do not test Supabase Auth, SMTP, Storage's HTTP upload restrictions, PostgREST, or your deployed configuration.
 
-For a Supabase deployment, also run [`supabase/tests/rls.sql`](supabase/tests/rls.sql) in a development project's SQL editor after the schema. It checks anonymous and authenticated access, ownership, draft/disabled-link privacy, click permissions, and timestamps, then rolls back its fixtures. It raises an exception on a failing assertion.
+For a Supabase deployment, also run [`supabase/tests/rls.sql`](supabase/tests/rls.sql) in a development project's SQL editor after the schema. It checks anonymous and authenticated access, ownership, draft/disabled-link privacy, click permissions, timestamps, image ownership and publication rules, and public listing restrictions, then rolls back its fixtures. It raises an exception on a failing assertion.
 
 Before sharing a deployment:
 
@@ -276,24 +292,28 @@ Before sharing a deployment:
 
 ## Troubleshooting
 
-| Symptom                                              | Check                                                                                                                                                      |
-| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `node:sqlite` is unavailable                         | Use Node.js 24 for development, tests, builds, and the server runtime.                                                                                     |
-| Database cannot be opened                            | Check `LINKBOARD_DATABASE_PATH`, its parent directory's write permissions, and persistent storage.                                                         |
-| Accounts disappear after replacing a container       | Restore the original persistent volume. Container-local files are not a durable deployment strategy.                                                       |
-| Serverless deployment reports configuration required | Set the public Supabase URL and one public key, apply the schema, and rebuild.                                                                             |
-| Pages shows the installation guide                   | Complete the Supabase schema and Auth setup, add both public connection values to repository Actions variables, then manually run **Deploy GitHub Pages**. |
-| Pages build reports incomplete/invalid configuration | Supply the project URL and one valid public key together, without quotation marks. Clearing all three Supabase values exports the installation guide.      |
-| Pages still serves an older root page                | Set Pages Source to **GitHub Actions** and rerun **Deploy GitHub Pages** after the current workflow succeeds.                                              |
-| Pages confirmation or QR loses `/linkboard/`         | Keep the canonical site value origin-only, set `NEXT_PUBLIC_BASE_PATH=/linkboard`, and allow the full project-root/login redirects in Supabase.            |
-| Supabase login works but saving fails                | Run the complete schema and inspect the returned validation or permission error.                                                                           |
-| Authentication fails behind a reverse proxy          | Set the final HTTPS `NEXT_PUBLIC_SITE_URL` before building; the browser origin must match it.                                                              |
-| Supabase confirmation returns to localhost           | Update Supabase Site URL and allowed redirects for production.                                                                                             |
-| Signup says the email address is not authorized      | Configure custom SMTP; Supabase's built-in sender only delivers to project-team email addresses.                                                           |
-| Signup reports an email rate limit                   | Check Supabase's Auth email limits and your SMTP provider's quota. Wait for the limit to reset; repeated retries do not bypass it.                         |
-| Supabase reports that a table or function is missing | Run the whole `supabase/schema.sql` in the same project whose URL/key you configured, and ensure its Data API exposes `public`.                            |
-| Public profile is missing                            | Check the saved username, publishing state, network, and backend availability.                                                                             |
-| QR points to an old domain                           | Correct `NEXT_PUBLIC_SITE_URL`, rebuild, and download the QR again.                                                                                        |
-| Avatar does not appear                               | Use a directly accessible HTTPS image URL; inaccessible images use the fallback.                                                                           |
-| Click totals look incomplete                         | Check enabled/published state, network requests, and the analytics limitations above.                                                                      |
-| Interface theme returns to System                    | Browser storage may be blocked or cleared. This affects display preference only, not account or profile data.                                              |
+| Symptom                                              | Check                                                                                                                                                                |
+| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `node:sqlite` is unavailable                         | Use Node.js 24 for development, tests, builds, and the server runtime.                                                                                               |
+| Database cannot be opened                            | Check `LINKBOARD_DATABASE_PATH`, its parent directory's write permissions, and persistent storage.                                                                   |
+| Accounts disappear after replacing a container       | Restore the original persistent volume. Container-local files are not a durable deployment strategy.                                                                 |
+| Serverless deployment reports configuration required | Set the public Supabase URL and one public key, apply the schema, and rebuild.                                                                                       |
+| Pages shows the installation guide                   | Complete the Supabase schema and Auth setup, add both public connection values to repository Actions variables, then manually run **Deploy GitHub Pages**.           |
+| Pages build reports incomplete/invalid configuration | Supply the project URL and one valid public key together, without quotation marks. Clearing all three Supabase values exports the installation guide.                |
+| Pages still serves an older root page                | Set Pages Source to **GitHub Actions** and rerun **Deploy GitHub Pages** after the current workflow succeeds.                                                        |
+| Pages confirmation or QR loses `/linkboard/`         | Keep the canonical site value origin-only, set `NEXT_PUBLIC_BASE_PATH=/linkboard`, and allow the full project-root/login redirects in Supabase.                      |
+| Supabase login works but saving fails                | Run the complete schema and inspect the returned validation or permission error.                                                                                     |
+| Authentication fails behind a reverse proxy          | Set the final HTTPS `NEXT_PUBLIC_SITE_URL` before building; the browser origin must match it.                                                                        |
+| Supabase confirmation returns to localhost           | Update Supabase Site URL and allowed redirects for production.                                                                                                       |
+| Signup says the email address is not authorized      | Configure custom SMTP; Supabase's built-in sender only delivers to project-team email addresses.                                                                     |
+| Signup reports an email rate limit                   | Check Supabase's Auth email limits and your SMTP provider's quota. Wait for the limit to reset; repeated retries do not bypass it.                                   |
+| Supabase reports that a table or function is missing | Run the whole `supabase/schema.sql` in the same project whose URL/key you configured, and ensure its Data API exposes `public`.                                      |
+| Public profile is missing                            | Check the saved username, publishing state, network, and backend availability.                                                                                       |
+| QR points to an old domain                           | Correct `NEXT_PUBLIC_SITE_URL`, rebuild, and download the QR again.                                                                                                  |
+| External image does not appear                       | Use a directly accessible HTTPS image URL; inaccessible images use the fallback.                                                                                     |
+| Image upload says storage is not configured          | Apply `supabase/migrations/202609130002_profile_images.sql` to the configured Supabase project before deploying the frontend. Confirm the bucket and policies exist. |
+| Uploaded image is missing while signed out           | Save the image choice and publish the profile. Draft and unused uploads are intentionally private. Check that the Storage migration succeeded.                       |
+| Image is rejected or fails to prepare                | Choose a valid JPEG, PNG, or WebP within the documented size/dimension limits. Use a current browser that can encode WebP, or use an HTTPS image URL.                |
+| Image storage is full                                | The built-in backend allows 50 MiB per account, including unused uploads. Ask the administrator to review storage; Supabase deployments use project quotas.          |
+| Click totals look incomplete                         | Check enabled/published state, network requests, and the analytics limitations above.                                                                                |
+| Interface theme returns to System                    | Browser storage may be blocked or cleared. This affects display preference only, not account or profile data.                                                        |

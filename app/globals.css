@@ -408,6 +408,60 @@ a {
 .workspace-main {
   margin-left: var(--sidebar);
 }
+.dashboard-image {
+  position: relative;
+  isolation: isolate;
+}
+.dashboard-background {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+.dashboard-image .editor-column {
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+}
+.app-shell.dashboard-image .preview-column {
+  background: color-mix(in srgb, var(--bg) 68%, transparent);
+}
+.background-editor {
+  padding-bottom: 25px;
+  margin-bottom: 25px;
+  border-bottom: 1px solid var(--line);
+}
+.image-settings {
+  display: grid;
+  gap: 16px;
+  margin-top: 20px;
+}
+.image-settings > label {
+  display: grid;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text);
+}
+.image-settings select {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--text);
+}
+.image-settings input[type='range'] {
+  width: 100%;
+  accent-color: var(--green);
+}
+.image-settings > .image-checkbox {
+  display: flex;
+  align-items: center;
+  line-height: 1.5;
+}
+.image-checkbox input {
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
+  accent-color: var(--green);
+}
 .topbar {
   position: sticky;
   top: 0;

@@ -1,33 +1,55 @@
 'use client';
 
-import { useState, type CSSProperties } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
-import {
-  ExternalLink,
-  Github,
-  Globe,
-  Instagram,
-  Linkedin,
-  Mail,
-  Music2,
-  Twitter,
-  Youtube,
-} from 'lucide-react';
-import type { Platform, Profile } from '@/lib/types';
-import { safeAvatarUrl, safeUrl } from '@/lib/validation';
+import { ExternalLink } from 'lucide-react';
+import type { Profile } from '@/lib/types';
+import { safeUrl } from '@/lib/validation';
+import { useImageUrl } from '@/lib/images';
 import { AnimatedGroup } from './motion/animated-group';
+import { PlatformIcon } from './icons';
 
-const platformIcons = {
-  website: Globe,
-  instagram: Instagram,
-  youtube: Youtube,
-  twitter: Twitter,
-  tiktok: Music2,
-  linkedin: Linkedin,
-  github: Github,
-  spotify: Music2,
-  mail: Mail,
-} satisfies Record<Platform, typeof Globe>;
+/** A decorative layer shared by public pages, previews, and the dashboard. */
+export function ProfileBackground({
+  source,
+  position = 'center',
+  overlay = 45,
+  onReadyChange,
+}: {
+  source?: string;
+  position?: 'top' | 'center' | 'bottom';
+  overlay?: number;
+  onReadyChange?: (ready: boolean) => void;
+}) {
+  const url = useImageUrl(source);
+  const [loadedUrl, setLoadedUrl] = useState('');
+  const [failedUrl, setFailedUrl] = useState('');
+  const ready = !!url && loadedUrl === url && failedUrl !== url;
+  useEffect(() => {
+    onReadyChange?.(ready);
+    return () => onReadyChange?.(false);
+  }, [ready, onReadyChange]);
+  if (!url || failedUrl === url) return null;
+  return (
+    <div className={`profile-background${ready ? ' is-ready' : ''}`} aria-hidden="true">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={url}
+        alt=""
+        style={{ objectPosition: `center ${position}` }}
+        onLoad={() => setLoadedUrl(url)}
+        onError={() => setFailedUrl(url)}
+        referrerPolicy="no-referrer"
+      />
+      <div
+        className="profile-background-overlay"
+        style={{
+          opacity: Math.min(80, Math.max(0, Number.isFinite(overlay) ? overlay : 45)) / 100,
+        }}
+      />
+    </div>
+  );
+}
 
 /** Choose the more legible foreground using WCAG relative luminance. */
 export function profileThemeStyle(
@@ -66,13 +88,16 @@ export default function ProfileCard({
   compact = false,
   onLinkClick,
   showBrand = true,
+  backgroundHandled = false,
 }: {
   profile: Profile;
   compact?: boolean;
   onLinkClick?: (linkId: string) => void;
   showBrand?: boolean;
+  backgroundHandled?: boolean;
 }) {
   const [failedAvatar, setFailedAvatar] = useState<string | null>(null);
+  const avatarUrl = useImageUrl(profile.avatarUrl);
   const initials =
     profile.name
       .trim()
@@ -82,10 +107,10 @@ export default function ProfileCard({
       .map((word) => word[0])
       .join('')
       .toUpperCase() || 'L';
-  const avatarVisible =
-    profile.avatarUrl && failedAvatar !== profile.avatarUrl && safeAvatarUrl(profile.avatarUrl);
+  const avatarVisible = avatarUrl && failedAvatar !== avatarUrl;
   const links = profile.links.filter((link) => link.enabled && safeUrl(link.url));
   const customBackground = profileThemeStyle(profile);
+  if (backgroundHandled && customBackground) delete customBackground.backgroundColor;
   const Heading = compact ? 'h2' : 'h1';
   const recordClick = (linkId: string) => {
     // Tracking must never prevent a visitor from reaching the destination.
@@ -98,18 +123,26 @@ export default function ProfileCard({
 
   return (
     <section
-      className={`profile-card theme-${profile.theme}${compact ? ' profile-card-compact' : ''}`}
+      className={`profile-card profile-image-background theme-${profile.theme}${compact ? ' profile-card-compact' : ''}`}
       style={customBackground}
       aria-label={`${profile.name || profile.username}'s links`}
     >
+      {!backgroundHandled && (
+        <ProfileBackground
+          source={profile.appearance?.backgroundImageUrl}
+          position={profile.appearance?.backgroundPosition}
+          overlay={profile.appearance?.backgroundOverlay}
+        />
+      )}
       <div className="profile-avatar">
         {avatarVisible ? (
           // Native images support validated avatar URLs from any HTTPS host.
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={profile.avatarUrl}
+            src={avatarUrl}
             alt={profile.name || profile.username}
-            onError={() => setFailedAvatar(profile.avatarUrl)}
+            style={{ objectPosition: `center ${profile.appearance?.avatarPosition || 'center'}` }}
+            onError={() => setFailedAvatar(avatarUrl)}
             referrerPolicy="no-referrer"
           />
         ) : (
@@ -120,7 +153,6 @@ export default function ProfileCard({
       {profile.bio && <p className="profile-bio">{profile.bio}</p>}
       <AnimatedGroup className="profile-links" disabled={compact}>
         {links.map((link) => {
-          const Icon = platformIcons[link.platform] || Globe;
           return (
             <a
               className="profile-link"
@@ -137,7 +169,7 @@ export default function ProfileCard({
               aria-label={`${link.title || link.platform} (opens in a new tab)`}
             >
               <span className={`platform-icon platform-${link.platform}`}>
-                <Icon size={19} strokeWidth={1.7} aria-hidden="true" />
+                <PlatformIcon platform={link.platform} size={19} />
               </span>
               <span className="profile-link-title">{link.title || link.platform}</span>
               <ExternalLink
