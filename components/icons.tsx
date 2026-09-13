@@ -1,52 +1,50 @@
-import {
-  Globe,
-  Instagram,
-  Youtube,
-  Github,
-  Linkedin,
-  Music2,
-  Mail,
-  AudioLines,
-} from 'lucide-react';
+import { Globe, Mail } from 'lucide-react';
+import { faGithub } from '@fortawesome/free-brands-svg-icons/faGithub';
+import { faInstagram } from '@fortawesome/free-brands-svg-icons/faInstagram';
+import { faLinkedin } from '@fortawesome/free-brands-svg-icons/faLinkedin';
+import { faSpotify } from '@fortawesome/free-brands-svg-icons/faSpotify';
+import { faTiktok } from '@fortawesome/free-brands-svg-icons/faTiktok';
+import { faWhatsapp } from '@fortawesome/free-brands-svg-icons/faWhatsapp';
+import { faXTwitter } from '@fortawesome/free-brands-svg-icons/faXTwitter';
+import { faYoutube } from '@fortawesome/free-brands-svg-icons/faYoutube';
 import type { Platform } from '@/lib/types';
 
-export function WhatsAppIcon({ size = 21 }: { size?: number }) {
+// Individual imports keep only the eight brand marks in the browser bundle.
+const brandIcons = {
+  instagram: faInstagram,
+  youtube: faYoutube,
+  twitter: faXTwitter,
+  tiktok: faTiktok,
+  spotify: faSpotify,
+  github: faGithub,
+  linkedin: faLinkedin,
+  whatsapp: faWhatsapp,
+};
+
+export function PlatformIcon({ platform, size = 21 }: { platform: Platform; size?: number }) {
+  if (platform === 'mail') return <Mail size={size} strokeWidth={1.7} aria-hidden="true" />;
+  if (platform === 'website') return <Globe size={size} strokeWidth={1.7} aria-hidden="true" />;
+  const brand = brandIcons[platform];
+  if (!brand) return <Globe size={size} strokeWidth={1.7} aria-hidden="true" />;
+  const [width, height, , , path] = brand.icon;
   return (
     <svg
       width={size}
       height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.7"
-      strokeLinecap="round"
-      strokeLinejoin="round"
+      viewBox={`0 0 ${width} ${height}`}
+      fill="currentColor"
       aria-hidden="true"
+      focusable="false"
+      data-platform={platform}
     >
-      <path d="M21 11.5a8.7 8.7 0 0 1-9 9 9.5 9.5 0 0 1-4.2-1L3 21l1.5-4.8A9.5 9.5 0 0 1 3.5 12a8.7 8.7 0 0 1 9-9H13a8.7 8.7 0 0 1 8 8v.5Z" />
-      <path d="m8.4 7.2 1.2 2.3-1 1.1c.7 1.7 2 3 3.7 3.7l1.1-1 2.3 1.2c.3.2.4.6.2.9-.5 1-1.6 1.5-2.7 1.2a9.2 9.2 0 0 1-6.4-6.4c-.3-1.1.2-2.2 1.2-2.7.2-.1.3-.2.4-.3Z" />
+      <metadata>
+        Font Awesome Free 7.3.1 by Fonticons, Inc. — https://fontawesome.com — CC BY 4.0
+        (https://creativecommons.org/licenses/by/4.0/). Original brand artwork; display color and
+        size follow the page theme.
+      </metadata>
+      {(Array.isArray(path) ? path : [path]).map((d, index) => (
+        <path key={index} d={d} />
+      ))}
     </svg>
   );
-}
-
-export function PlatformIcon({ platform, size = 21 }: { platform: Platform; size?: number }) {
-  if (platform === 'whatsapp') return <WhatsAppIcon size={size} />;
-  const icons = {
-    website: Globe,
-    instagram: Instagram,
-    youtube: Youtube,
-    github: Github,
-    linkedin: Linkedin,
-    spotify: AudioLines,
-    tiktok: Music2,
-    mail: Mail,
-  };
-  if (platform === 'twitter')
-    return (
-      <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-        <path d="M18.9 2H22l-6.8 7.8L23.2 22h-6.3L12 14.6 5.5 22H2.3l7.9-9L.8 2h6.5l4.5 6.8L18.9 2Zm-1.1 18h1.7L6.3 3.9H4.5L17.8 20Z" />
-      </svg>
-    );
-  const Icon = icons[platform] || Globe;
-  return <Icon size={size} strokeWidth={1.7} aria-hidden="true" />;
 }

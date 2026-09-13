@@ -30,3 +30,13 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 Other dependencies retain their licenses in their distributed packages.
+
+## Font Awesome Free brand icons
+
+The Instagram, TikTok, YouTube, X, Spotify, GitHub, LinkedIn, and WhatsApp SVG marks
+come from [Font Awesome Free 7.3.1](https://fontawesome.com), by Fonticons, Inc.
+The SVG artwork is licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+Linkboard uses the original paths and adjusts their display size and color to match
+the page theme. Attribution is also embedded in each rendered SVG's metadata.
+The package's supporting code uses the MIT license; its complete license is
+included in `node_modules/@fortawesome/free-brands-svg-icons/LICENSE.txt`.

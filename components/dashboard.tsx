@@ -1367,18 +1367,23 @@ export default function Dashboard() {
             </label>
             <label>
               Platform
-              <select
-                value={newLink.platform}
-                onChange={(e) =>
-                  setNewLink((n) => ({ ...n, platform: e.target.value as Platform }))
-                }
-              >
-                {platforms.map((p) => (
-                  <option key={p.value} value={p.value}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
+              <span className="platform-select">
+                <span className="platform-select-icon">
+                  <PlatformIcon platform={newLink.platform} size={20} />
+                </span>
+                <select
+                  value={newLink.platform}
+                  onChange={(e) =>
+                    setNewLink((n) => ({ ...n, platform: e.target.value as Platform }))
+                  }
+                >
+                  {platforms.map((p) => (
+                    <option key={p.value} value={p.value}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </span>
             </label>
             {newLinkError && (
               <p className="form-error" role="alert">

@@ -1135,6 +1135,21 @@ a {
 .profile-link-arrow {
   opacity: 0.4;
 }
+.platform-select {
+  position: relative;
+  display: block;
+}
+.platform-select-icon {
+  position: absolute;
+  inset: 0 auto 0 13px;
+  display: grid;
+  place-items: center;
+  color: var(--text);
+  pointer-events: none;
+}
+.profile-form .platform-select select {
+  padding-left: 43px;
+}
 .profile-brand {
   display: flex;
   align-items: center;
