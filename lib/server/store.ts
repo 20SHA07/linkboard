@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID, scrypt, timingSafeEqual } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { Account, ClickEvent, Profile } from '../types';
+import { appearanceKeys } from '../appearance-options';
 import { validateEmail, validateProfile, validateUsername } from '../validation';
 import { getDatabase, transaction } from './database';
 import { HttpError } from './errors';
@@ -216,6 +217,7 @@ export class BuiltinStore {
     if (error) throw new HttpError(400, error);
     if (input.id !== account.id) throw new HttpError(403, 'You can only change your own profile.');
     const canonicalUrl = (url: string) => (/^https?:\/\//i.test(url) ? new URL(url).href : url);
+    const appearance = input.appearance;
     const profile: Profile = {
       id: account.id,
       username: input.username,
@@ -224,25 +226,18 @@ export class BuiltinStore {
       avatarUrl: canonicalUrl(input.avatarUrl),
       theme: input.theme,
       backgroundColor: input.backgroundColor,
-      ...(input.appearance
+      ...(appearance
         ? {
-            appearance: {
-              ...(input.appearance.backgroundImageUrl !== undefined
-                ? { backgroundImageUrl: canonicalUrl(input.appearance.backgroundImageUrl) }
-                : {}),
-              ...(input.appearance.backgroundPosition !== undefined
-                ? { backgroundPosition: input.appearance.backgroundPosition }
-                : {}),
-              ...(input.appearance.backgroundOverlay !== undefined
-                ? { backgroundOverlay: input.appearance.backgroundOverlay }
-                : {}),
-              ...(input.appearance.avatarPosition !== undefined
-                ? { avatarPosition: input.appearance.avatarPosition }
-                : {}),
-              ...(input.appearance.dashboardBackground !== undefined
-                ? { dashboardBackground: input.appearance.dashboardBackground }
-                : {}),
-            },
+            appearance: Object.fromEntries(
+              appearanceKeys
+                .filter((key) => appearance[key] !== undefined)
+                .map((key) => [
+                  key,
+                  key === 'backgroundImageUrl'
+                    ? canonicalUrl(appearance[key] as string)
+                    : appearance[key],
+                ]),
+            ),
           }
         : {}),
       published: input.published,

@@ -6,6 +6,7 @@ import { ExternalLink } from 'lucide-react';
 import type { Profile } from '@/lib/types';
 import { safeUrl } from '@/lib/validation';
 import { useImageUrl } from '@/lib/images';
+import { profileAppearanceStyles } from '@/lib/appearance';
 import { AnimatedGroup } from './motion/animated-group';
 import { PlatformIcon } from './icons';
 
@@ -14,11 +15,13 @@ export function ProfileBackground({
   source,
   position = 'center',
   overlay = 45,
+  fit = 'cover',
   onReadyChange,
 }: {
   source?: string;
   position?: 'top' | 'center' | 'bottom';
   overlay?: number;
+  fit?: 'cover' | 'contain';
   onReadyChange?: (ready: boolean) => void;
 }) {
   const url = useImageUrl(source);
@@ -36,7 +39,10 @@ export function ProfileBackground({
       <img
         src={url}
         alt=""
-        style={{ objectPosition: `center ${position}` }}
+        style={{
+          objectPosition: `center ${['top', 'center', 'bottom'].includes(position) ? position : 'center'}`,
+          objectFit: fit === 'contain' ? 'contain' : 'cover',
+        }}
         onLoad={() => setLoadedUrl(url)}
         onError={() => setFailedUrl(url)}
         referrerPolicy="no-referrer"
@@ -109,8 +115,12 @@ export default function ProfileCard({
       .toUpperCase() || 'L';
   const avatarVisible = avatarUrl && failedAvatar !== avatarUrl;
   const links = profile.links.filter((link) => link.enabled && safeUrl(link.url));
-  const customBackground = profileThemeStyle(profile);
-  if (backgroundHandled && customBackground) delete customBackground.backgroundColor;
+  const appearance = profileAppearanceStyles(profile, compact);
+  const customBackground = { ...profileThemeStyle(profile), ...appearance.surface };
+  if (backgroundHandled) {
+    delete customBackground.backgroundColor;
+    delete customBackground.backgroundImage;
+  }
   const Heading = compact ? 'h2' : 'h1';
   const recordClick = (linkId: string) => {
     // Tracking must never prevent a visitor from reaching the destination.
@@ -132,30 +142,42 @@ export default function ProfileCard({
           source={profile.appearance?.backgroundImageUrl}
           position={profile.appearance?.backgroundPosition}
           overlay={profile.appearance?.backgroundOverlay}
+          fit={profile.appearance?.backgroundFit}
         />
       )}
-      <div className="profile-avatar">
-        {avatarVisible ? (
-          // Native images support validated avatar URLs from any HTTPS host.
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={avatarUrl}
-            alt={profile.name || profile.username}
-            style={{ objectPosition: `center ${profile.appearance?.avatarPosition || 'center'}` }}
-            onError={() => setFailedAvatar(avatarUrl)}
-            referrerPolicy="no-referrer"
-          />
-        ) : (
-          <span aria-label={`${profile.name || profile.username}'s initials`}>{initials}</span>
-        )}
-      </div>
-      <Heading className="profile-name">{profile.name || profile.username}</Heading>
-      {profile.bio && <p className="profile-bio">{profile.bio}</p>}
+      {profile.appearance?.showAvatar !== false && (
+        <div className="profile-avatar" style={appearance.avatar}>
+          {avatarVisible ? (
+            // Native images support validated avatar URLs from any HTTPS host.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={avatarUrl}
+              alt={profile.name || profile.username}
+              style={{
+                objectPosition: `center ${['top', 'center', 'bottom'].includes(profile.appearance?.avatarPosition || '') ? profile.appearance?.avatarPosition : 'center'}`,
+              }}
+              onError={() => setFailedAvatar(avatarUrl)}
+              referrerPolicy="no-referrer"
+            />
+          ) : (
+            <span aria-label={`${profile.name || profile.username}'s initials`}>{initials}</span>
+          )}
+        </div>
+      )}
+      <Heading className="profile-name" style={appearance.heading}>
+        {profile.name || profile.username}
+      </Heading>
+      {profile.bio && (
+        <p className="profile-bio" style={appearance.bio}>
+          {profile.bio}
+        </p>
+      )}
       <AnimatedGroup className="profile-links" disabled={compact}>
         {links.map((link) => {
           return (
             <a
               className="profile-link"
+              style={appearance.link}
               key={link.id}
               href={link.url}
               target="_blank"
@@ -168,16 +190,20 @@ export default function ProfileCard({
               }}
               aria-label={`${link.title || link.platform} (opens in a new tab)`}
             >
-              <span className={`platform-icon platform-${link.platform}`}>
-                <PlatformIcon platform={link.platform} size={19} />
-              </span>
+              {profile.appearance?.showLinkIcons !== false && (
+                <span className={`platform-icon platform-${link.platform}`}>
+                  <PlatformIcon platform={link.platform} size={19} />
+                </span>
+              )}
               <span className="profile-link-title">{link.title || link.platform}</span>
-              <ExternalLink
-                className="profile-link-arrow"
-                size={15}
-                strokeWidth={1.6}
-                aria-hidden="true"
-              />
+              {profile.appearance?.showLinkArrows !== false && (
+                <ExternalLink
+                  className="profile-link-arrow"
+                  size={15}
+                  strokeWidth={1.6}
+                  aria-hidden="true"
+                />
+              )}
             </a>
           );
         })}
@@ -185,7 +211,7 @@ export default function ProfileCard({
           <p className="profile-empty">Something good is on the way. Check back soon.</p>
         )}
       </AnimatedGroup>
-      {showBrand && (
+      {showBrand && profile.appearance?.showBranding !== false && (
         <Link className="profile-brand" href="/">
           Made with <strong>linkboard</strong>
           <span aria-hidden="true">↗</span>

@@ -47,6 +47,7 @@ import type {
 } from '@/lib/types';
 import ProfileCard, { ProfileBackground } from './profile-card';
 import ImagePicker from './image-picker';
+import AppearanceEditor from './appearance-editor';
 import QRCode from './qr-code';
 import { PlatformIcon } from './icons';
 import { AnimatedBackground } from './motion/animated-background';
@@ -428,6 +429,7 @@ export default function Dashboard() {
             source={profile.appearance?.backgroundImageUrl}
             position={profile.appearance?.backgroundPosition}
             overlay={profile.appearance?.backgroundOverlay}
+            fit={profile.appearance?.backgroundFit}
           />
         </div>
       )}
@@ -962,8 +964,13 @@ export default function Dashboard() {
                     </label>
                   </div>
                   <p className="field-help">
-                    Your links and text automatically stay readable on your chosen background.
+                    Automatic text colors follow your theme. Customize them below if you like.
                   </p>
+                  <AppearanceEditor
+                    profile={profile}
+                    disabled={saving}
+                    onChange={(values) => updateAppearance(values, profile.id)}
+                  />
                 </section>
               )}
               {tab === 'analytics' && (

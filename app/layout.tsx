@@ -7,6 +7,7 @@ import '@fontsource-variable/manrope';
 import './globals.css';
 import './public.css';
 import './theme.css';
+import './customization.css';
 import './setup.css';
 export const metadata: Metadata = {
   title: {

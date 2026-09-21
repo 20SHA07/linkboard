@@ -324,6 +324,20 @@
 .profile-link-arrow {
   flex-shrink: 0;
 }
+.profile-card .profile-links {
+  gap: var(--profile-link-gap, 11px);
+  max-width: var(--profile-content-width, 100%);
+}
+.profile-card-compact .profile-links {
+  gap: var(--profile-link-gap, 10px);
+}
+.profile-card .profile-name,
+.profile-card .profile-bio {
+  max-width: min(100%, var(--profile-content-width, 100%));
+}
+.public-main > .profile-card .profile-bio {
+  max-width: min(100%, var(--profile-content-width, 360px));
+}
 .profile-empty {
   font-size: 12px;
   line-height: 1.6;
@@ -364,7 +378,7 @@
   background: #000;
 }
 :is(.public-page, .profile-card):has(> .profile-background.is-ready) {
-  color: #fff !important;
+  color: var(--profile-text-color, #fff) !important;
   --profile-link-bg: rgba(255, 255, 255, 0.94);
   --profile-link-border: rgba(255, 255, 255, 0.75);
 }

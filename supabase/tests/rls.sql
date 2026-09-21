@@ -68,6 +68,10 @@ begin
   update public.profiles set name = 'Cross-tenant change' where id = 'b2222222-2222-4222-8222-222222222222';
   get diagnostics touched = row_count;
   if touched <> 0 then raise exception 'FAIL: Owner A changed owner B profile'; end if;
+  update public.profiles set appearance = '{"fontFamily":"serif","avatarSize":200}'
+    where id = 'b2222222-2222-4222-8222-222222222222';
+  get diagnostics touched = row_count;
+  if touched <> 0 then raise exception 'FAIL: Owner A changed owner B appearance'; end if;
   begin
     update public.profiles set id = 'b2222222-2222-4222-8222-222222222222' where id = 'a1111111-1111-4111-8111-111111111111';
     raise exception 'FAIL: Owner can change profile ownership';
@@ -88,6 +92,18 @@ begin
     update public.click_events set created_at = '2000-01-01';
     raise exception 'FAIL: Owner can forge click timestamps';
   exception when insufficient_privilege then null;
+  end;
+  begin
+    update public.profiles set appearance = '{"textColor":"url(https://example.com)","avatarSize":200}'
+      where id = 'a1111111-1111-4111-8111-111111111111';
+    raise exception 'FAIL: Arbitrary CSS accepted as a color';
+  exception when check_violation then null;
+  end;
+  begin
+    update public.profiles set appearance = '{"fontFamily":"unapproved-font","avatarSize":200}'
+      where id = 'a1111111-1111-4111-8111-111111111111';
+    raise exception 'FAIL: Arbitrary font declaration accepted';
+  exception when check_violation then null;
   end;
 end;
 $$;
@@ -119,7 +135,7 @@ select set_config('request.jwt.claim.sub', 'a1111111-1111-4111-8111-111111111111
 select set_config('request.jwt.claims', '{"sub":"a1111111-1111-4111-8111-111111111111","role":"authenticated"}', true);
 update public.profiles set
   avatar_url = 'media:a1111111-1111-4111-8111-111111111111/11111111-1111-4111-8111-111111111111.webp',
-  appearance = '{"backgroundImageUrl":"media:a1111111-1111-4111-8111-111111111111/22222222-2222-4222-8222-222222222222.webp","backgroundPosition":"center","avatarPosition":"top","backgroundOverlay":40,"dashboardBackground":true}',
+  appearance = '{"backgroundImageUrl":"media:a1111111-1111-4111-8111-111111111111/22222222-2222-4222-8222-222222222222.webp","backgroundPosition":"center","avatarPosition":"top","backgroundOverlay":40,"dashboardBackground":true,"fontFamily":"manrope","headingFontFamily":"serif","headingWeight":700,"textColor":"#123456","avatarSize":160,"avatarShape":"rounded","linkStyle":"outline","showLinkIcons":false}',
   links = '[{"id":"whatsapp","title":"WhatsApp","url":"https://wa.me/971501234567","platform":"whatsapp","enabled":true}]'
 where id = 'a1111111-1111-4111-8111-111111111111';
 -- Older clients that omit appearance in a PATCH retain the saved background.
@@ -130,6 +146,9 @@ declare touched integer;
 begin
   if (select appearance ->> 'backgroundOverlay' from public.profiles) is distinct from '40' then
     raise exception 'FAIL: An unrelated profile edit erased appearance';
+  end if;
+  if (select appearance ->> 'avatarSize' from public.profiles) is distinct from '160' then
+    raise exception 'FAIL: An unrelated profile edit erased customization';
   end if;
   insert into storage.objects (bucket_id, name) values
     ('linkboard-images', 'a1111111-1111-4111-8111-111111111111/44444444-4444-4444-8444-444444444444.webp');
@@ -180,6 +199,12 @@ begin
   if (select count(*) from storage.objects) <> 2 then raise exception 'FAIL: Anonymous signing must allow exactly the two published image references'; end if;
   profile := public.get_public_profile('rls-user-a');
   if profile -> 'appearance' ->> 'avatarPosition' is distinct from 'top' then raise exception 'FAIL: Public appearance missing'; end if;
+  if profile -> 'appearance' ->> 'fontFamily' is distinct from 'manrope'
+    or profile -> 'appearance' ->> 'textColor' is distinct from '#123456'
+    or profile -> 'appearance' ->> 'avatarSize' is distinct from '160'
+    or profile -> 'appearance' ->> 'showLinkIcons' is distinct from 'false' then
+    raise exception 'FAIL: Published page customization missing';
+  end if;
   if profile -> 'links' -> 0 ->> 'platform' is distinct from 'whatsapp' then raise exception 'FAIL: WhatsApp link missing'; end if;
   begin
     insert into storage.objects (bucket_id, name) values

@@ -1,4 +1,11 @@
 import type { Platform, Profile, Theme } from './types';
+import {
+  appearanceBooleans,
+  appearanceColors,
+  appearanceEnums,
+  appearanceKeys,
+  appearanceNumbers,
+} from './appearance-options';
 
 export const MAX_LINKS = 30;
 export const MAX_BIO_LENGTH = 280;
@@ -104,38 +111,40 @@ export function validateProfile(profile: Profile): string | null {
   if (profile.appearance !== undefined) {
     const appearance = profile.appearance;
     if (!appearance || typeof appearance !== 'object' || Array.isArray(appearance))
-      return 'Choose valid image settings.';
-    const fields = [
-      'backgroundImageUrl',
-      'backgroundPosition',
-      'backgroundOverlay',
-      'avatarPosition',
-      'dashboardBackground',
-    ];
-    if (Object.keys(appearance).some((key) => !fields.includes(key)))
-      return 'Choose valid image settings.';
+      return 'Choose valid appearance settings.';
+    if (Object.keys(appearance).some((key) => !(appearanceKeys as readonly string[]).includes(key)))
+      return 'Choose valid appearance settings.';
     if (
       appearance.backgroundImageUrl !== undefined &&
       (typeof appearance.backgroundImageUrl !== 'string' ||
         !ownedImage(appearance.backgroundImageUrl, profile.id))
     )
       return 'Upload your own background image or enter a valid HTTPS image URL.';
-    for (const position of [appearance.backgroundPosition, appearance.avatarPosition]) {
-      if (position !== undefined && !['top', 'center', 'bottom'].includes(position))
-        return 'Choose top, center, or bottom for image positioning.';
+    for (const key of appearanceColors) {
+      const value = appearance[key];
+      if (value !== undefined && (typeof value !== 'string' || !/^#[0-9a-f]{6}$/i.test(value)))
+        return 'Choose colors in six-digit hex format, such as #f6f4ef.';
     }
-    if (
-      appearance.backgroundOverlay !== undefined &&
-      (!Number.isInteger(appearance.backgroundOverlay) ||
-        appearance.backgroundOverlay < 0 ||
-        appearance.backgroundOverlay > 80)
-    )
-      return 'Choose a background overlay between 0 and 80.';
-    if (
-      appearance.dashboardBackground !== undefined &&
-      typeof appearance.dashboardBackground !== 'boolean'
-    )
-      return 'Choose whether to show the image in your dashboard.';
+    for (const [key, [minimum, maximum]] of Object.entries(appearanceNumbers)) {
+      const value = appearance[key as keyof typeof appearanceNumbers];
+      if (
+        value !== undefined &&
+        (typeof value !== 'number' ||
+          !Number.isInteger(value) ||
+          value < minimum ||
+          value > maximum)
+      )
+        return `Choose a whole number between ${minimum} and ${maximum} for ${key.replace(/[A-Z]/g, (letter) => ` ${letter.toLowerCase()}`)}.`;
+    }
+    for (const [key, options] of Object.entries(appearanceEnums)) {
+      const value = appearance[key as keyof typeof appearanceEnums];
+      if (value !== undefined && !(options as readonly unknown[]).includes(value))
+        return 'Choose one of the available appearance options.';
+    }
+    for (const key of appearanceBooleans) {
+      if (appearance[key] !== undefined && typeof appearance[key] !== 'boolean')
+        return 'Appearance visibility settings must be on or off.';
+    }
   }
   if (!themes.includes(profile.theme)) return 'Choose one of the available themes.';
   if (

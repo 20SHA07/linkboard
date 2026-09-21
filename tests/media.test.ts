@@ -163,6 +163,39 @@ describe('persistent uploaded images', () => {
         backgroundOverlay: 40,
         avatarPosition: 'top',
         dashboardBackground: true,
+        backgroundFit: 'contain',
+        backgroundGradientColor: '#123456',
+        backgroundGradientAngle: 125,
+        textColor: '#223344',
+        headingColor: '#FFFFFF',
+        linkTextColor: '#001122',
+        linkBackgroundColor: '#aabbcc',
+        linkBorderColor: '#998877',
+        avatarBorderColor: '#654321',
+        fontFamily: 'mono',
+        headingFontFamily: 'serif',
+        headingWeight: 500,
+        headingSize: 44,
+        bioSize: 18,
+        linkFontSize: 20,
+        avatarSize: 164,
+        avatarShape: 'rounded',
+        avatarBorderWidth: 5,
+        textAlign: 'left',
+        linkAlign: 'right',
+        linkStyle: 'outline',
+        linkShadow: 'bold',
+        linkRadius: 12,
+        linkBorderWidth: 2,
+        linkGap: 22,
+        linkPadding: 24,
+        contentWidth: 680,
+        contentPadding: 72,
+        showAvatar: false,
+        showBranding: false,
+        showQrCode: false,
+        showLinkIcons: false,
+        showLinkArrows: false,
       },
     };
     const result = await save(
@@ -178,18 +211,59 @@ describe('persistent uploaded images', () => {
       ...profile,
       links: profile.links.map((link) => ({ ...link, url: new URL(link.url).href })),
     });
+    const persisted = new BuiltinStore().dashboard(owner.token).profile;
+    new BuiltinStore().saveProfile(owner.token, { ...persisted, published: true });
+    expect(new BuiltinStore().publicProfile(persisted.username)?.appearance).toEqual(
+      profile.appearance,
+    );
   });
 
   it('canonicalizes external image URLs while preserving optional controls', async () => {
     const profile = {
       ...new BuiltinStore().dashboard(owner.token).profile,
-      appearance: { backgroundImageUrl: 'https://example.com', avatarPosition: 'center' as const },
+      appearance: {
+        backgroundImageUrl: 'https://example.com',
+        avatarPosition: 'center' as const,
+        textColor: undefined,
+        avatarSize: undefined,
+        showAvatar: false,
+      },
     };
     new BuiltinStore().saveProfile(owner.token, profile);
     expect(new BuiltinStore().dashboard(owner.token).profile.appearance).toEqual({
       backgroundImageUrl: 'https://example.com/',
       avatarPosition: 'center',
+      showAvatar: false,
     });
+  });
+
+  it('preserves legacy profiles without appearance settings and supports a full reset', () => {
+    const store = new BuiltinStore();
+    const legacy = store.dashboard(owner.token).profile;
+    expect(legacy.appearance).toBeUndefined();
+    store.saveProfile(owner.token, legacy);
+    expect(store.dashboard(owner.token).profile).not.toHaveProperty('appearance');
+    store.saveProfile(owner.token, {
+      ...legacy,
+      appearance: { avatarSize: 180, textColor: '#123456' },
+    });
+    store.saveProfile(owner.token, { ...legacy, appearance: {} });
+    closeDatabase(databaseFile);
+    expect(new BuiltinStore().dashboard(owner.token).profile.appearance).toEqual({});
+  });
+
+  it('rejects unsafe customization through the profile API without changing stored settings', async () => {
+    const store = new BuiltinStore();
+    const existing = store.dashboard(owner.token).profile;
+    const result = await save(
+      new Request(`${origin}/api/profile`, {
+        method: 'PUT',
+        headers: { origin, 'content-type': 'application/json', cookie: owner.cookie },
+        body: JSON.stringify({ ...existing, appearance: { textColor: 'red;display:none' } }),
+      }),
+    );
+    expect(result.status).toBe(400);
+    expect(store.dashboard(owner.token).profile).toEqual(existing);
   });
 
   it('revokes owner access when the session is expired', async () => {

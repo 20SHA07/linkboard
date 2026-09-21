@@ -2,6 +2,54 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import {
+  appearanceBooleans,
+  appearanceColors,
+  appearanceEnums,
+  appearanceNumbers,
+} from '../lib/appearance-options';
+import type { ProfileAppearance } from '../lib/types';
+
+const customizedAppearance = {
+  backgroundImageUrl: 'https://example.com/background.webp',
+  backgroundPosition: 'bottom',
+  backgroundOverlay: 35,
+  avatarPosition: 'top',
+  dashboardBackground: false,
+  backgroundFit: 'contain',
+  backgroundGradientColor: '#Ab12CD',
+  backgroundGradientAngle: 225,
+  textColor: '#122334',
+  headingColor: '#FFFFFF',
+  linkTextColor: '#223344',
+  linkBackgroundColor: '#FFEEDD',
+  linkBorderColor: '#556677',
+  avatarBorderColor: '#000000',
+  fontFamily: 'manrope',
+  headingFontFamily: 'serif',
+  headingWeight: 800,
+  headingSize: 56,
+  bioSize: 24,
+  linkFontSize: 18,
+  avatarSize: 200,
+  avatarShape: 'rounded',
+  avatarBorderWidth: 8,
+  textAlign: 'right',
+  linkAlign: 'center',
+  linkStyle: 'glass',
+  linkShadow: 'bold',
+  linkRadius: 32,
+  linkBorderWidth: 4,
+  linkGap: 32,
+  linkPadding: 28,
+  contentWidth: 720,
+  contentPadding: 96,
+  showAvatar: true,
+  showBranding: false,
+  showQrCode: false,
+  showLinkIcons: false,
+  showLinkArrows: false,
+} satisfies ProfileAppearance;
 
 /**
  * PGlite runs PostgreSQL itself in WASM. Supabase-managed auth and Storage table
@@ -12,12 +60,14 @@ describe('PostgreSQL authorization and validation', () => {
   let database: PGlite;
   let schema: string;
   let authorizationTests: string;
+  let customizationMigration: string;
 
   beforeAll(async () => {
     database = new PGlite();
-    [schema, authorizationTests] = await Promise.all([
+    [schema, authorizationTests, customizationMigration] = await Promise.all([
       readFile(path.resolve('supabase/schema.sql'), 'utf8'),
       readFile(path.resolve('supabase/tests/rls.sql'), 'utf8'),
+      readFile(path.resolve('supabase/migrations/202609210001_profile_customization.sql'), 'utf8'),
     ]);
     await database.exec(`
       create role anon nologin;
@@ -87,6 +137,9 @@ describe('PostgreSQL authorization and validation', () => {
     );
     await database.exec(migration);
     await database.exec(migration);
+    // A historical migration replaces the validator with its historical version.
+    // Finish the actual upgrade sequence before checking the current contract.
+    await database.exec(customizationMigration);
     const bucket = await database.query<{
       public: boolean;
       file_size_limit: number;
@@ -102,6 +155,160 @@ describe('PostgreSQL authorization and validation', () => {
     const results = await database.exec(authorizationTests);
     const last = results.at(-1)?.rows[0] as { result?: string } | undefined;
     expect(last?.result).toMatch(/^PASS:/);
+  });
+
+  it('upgrades image appearances without data loss and reapplies without changing permissions', async () => {
+    const imageMigration = await readFile(
+      path.resolve('supabase/migrations/202609130002_profile_images.sql'),
+      'utf8',
+    );
+    const ownerId = 'c3333333-3333-4333-8333-333333333333';
+    const oldAppearance = {
+      backgroundImageUrl: `media:${ownerId}/11111111-1111-4111-8111-111111111111.webp`,
+      backgroundPosition: 'bottom',
+      avatarPosition: 'top',
+      backgroundOverlay: 60,
+      dashboardBackground: false,
+    };
+    const withoutTransaction = (sql: string) =>
+      sql.replace(/^begin;\s*$/m, '').replace(/^commit;\s*$/m, '');
+    await database.exec('begin');
+    try {
+      await database.exec(withoutTransaction(imageMigration));
+      await database.query('insert into auth.users (id, email) values ($1, $2)', [
+        ownerId,
+        'linkboard-customization-upgrade@example.invalid',
+      ]);
+      await database.query(
+        "update public.profiles set name = 'Existing owner', appearance = $1 where id = $2",
+        [JSON.stringify(oldAppearance), ownerId],
+      );
+      await database.exec(withoutTransaction(customizationMigration));
+      await database.exec(withoutTransaction(customizationMigration));
+      const saved = await database.query<{ name: string; appearance: object }>(
+        'select name, appearance from public.profiles where id = $1',
+        [ownerId],
+      );
+      expect(saved.rows[0]).toEqual({ name: 'Existing owner', appearance: oldAppearance });
+      const permissions = await database.query<{ can_edit: boolean; anon_can_edit: boolean }>(`
+        select has_column_privilege('authenticated', 'public.profiles', 'appearance', 'UPDATE') as can_edit,
+          has_column_privilege('anon', 'public.profiles', 'appearance', 'UPDATE') as anon_can_edit
+      `);
+      expect(permissions.rows[0]).toEqual({ can_edit: true, anon_can_edit: false });
+    } finally {
+      await database.exec('rollback');
+    }
+    const results = await database.exec(authorizationTests);
+    expect((results.at(-1)?.rows[0] as { result: string }).result).toMatch(/^PASS:/);
+  });
+
+  it('persists every customization for its owner and returns it on the published page', async () => {
+    const ownerId = 'c3333333-3333-4333-8333-333333333333';
+    await database.exec('begin');
+    try {
+      await database.query('insert into auth.users (id, email) values ($1, $2)', [
+        ownerId,
+        'linkboard-customization-roundtrip@example.invalid',
+      ]);
+      await database.exec('set local role authenticated');
+      await database.query("select set_config('request.jwt.claim.sub', $1, true)", [ownerId]);
+      const saved = await database.query<{ appearance: object }>(
+        "update public.profiles set username = 'customized-page', appearance = $1, published = true where id = $2 returning appearance",
+        [JSON.stringify(customizedAppearance), ownerId],
+      );
+      expect(saved.rows[0].appearance).toEqual(customizedAppearance);
+      // Profile-only PATCHes from existing clients retain all new fields.
+      await database.query('update public.profiles set bio = $1 where id = $2', [
+        'Updated by an existing client',
+        ownerId,
+      ]);
+      await database.exec('reset role; set local role anon');
+      const published = await database.query<{ profile: { appearance: object; bio: string } }>(
+        "select public.get_public_profile('customized-page') as profile",
+      );
+      expect(published.rows[0].profile.appearance).toEqual(customizedAppearance);
+      expect(published.rows[0].profile.bio).toBe('Updated by an existing client');
+    } finally {
+      await database.exec('rollback');
+    }
+  });
+
+  it.each(Object.entries(appearanceNumbers))(
+    'enforces the numeric bounds and JSON types for %s',
+    async (key, [min, max]) => {
+      for (const [value, expected] of [
+        [min, true],
+        [max, true],
+        [min - 1, false],
+        [max + 1, false],
+        [min + 0.5, false],
+        [String(min), false],
+        [null, false],
+        [true, false],
+      ] as const) {
+        const result = await database.query<{ valid: boolean }>(
+          'select private.linkboard_valid_appearance($1::jsonb, $2::uuid) as valid',
+          [JSON.stringify({ [key]: value }), 'a1111111-1111-4111-8111-111111111111'],
+        );
+        expect(result.rows[0].valid, `${key}=${JSON.stringify(value)}`).toBe(expected);
+      }
+    },
+  );
+
+  it.each(Object.entries(appearanceEnums))(
+    'accepts only the predefined %s choices',
+    async (key, choices) => {
+      for (const value of choices) {
+        const result = await database.query<{ valid: boolean }>(
+          'select private.linkboard_valid_appearance($1::jsonb, $2::uuid) as valid',
+          [JSON.stringify({ [key]: value }), 'a1111111-1111-4111-8111-111111111111'],
+        );
+        expect(result.rows[0].valid, `${key}=${JSON.stringify(value)}`).toBe(true);
+      }
+      for (const value of [null, {}, [], ['center'], 'unsupported', true, 900, '400']) {
+        const result = await database.query<{ valid: boolean }>(
+          'select private.linkboard_valid_appearance($1::jsonb, $2::uuid) as valid',
+          [JSON.stringify({ [key]: value }), 'a1111111-1111-4111-8111-111111111111'],
+        );
+        expect(result.rows[0].valid, `${key}=${JSON.stringify(value)}`).toBe(false);
+      }
+    },
+  );
+
+  it.each(appearanceColors)('accepts six-digit hex colors only for %s', async (key) => {
+    for (const [value, expected] of [
+      ['#aB12Cd', true],
+      ['#000000', true],
+      ['#FFFFFF', true],
+      ['#fff', false],
+      ['#FFFFFF00', false],
+      ['red', false],
+      ['', false],
+      ['#12345g', false],
+      ['#123456\n', false],
+      ['var(--private)', false],
+      [null, false],
+      [123456, false],
+      ['url(https://example.com)', false],
+    ] as const) {
+      const result = await database.query<{ valid: boolean }>(
+        'select private.linkboard_valid_appearance($1::jsonb, $2::uuid) as valid',
+        [JSON.stringify({ [key]: value }), 'a1111111-1111-4111-8111-111111111111'],
+      );
+      expect(result.rows[0].valid, `${key}=${JSON.stringify(value)}`).toBe(expected);
+    }
+  });
+
+  it.each(appearanceBooleans)('accepts boolean values only for %s', async (key) => {
+    for (const value of [true, false, 'true', 'false', 0, 1, null]) {
+      const result = await database.query<{ valid: boolean }>(
+        'select private.linkboard_valid_appearance($1::jsonb, $2::uuid) as valid',
+        [JSON.stringify({ [key]: value }), 'a1111111-1111-4111-8111-111111111111'],
+      );
+      expect(result.rows[0].valid, `${key}=${JSON.stringify(value)}`).toBe(
+        typeof value === 'boolean',
+      );
+    }
   });
 
   it('upgrades a profile without an appearance column while preserving its existing data', async () => {

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { Profile } from '../lib/types';
+import {
+  appearanceBooleans,
+  appearanceColors,
+  appearanceEnums,
+  appearanceNumbers,
+} from '../lib/appearance-options';
 import { safeUrl, validateEmail, validateProfile } from '../lib/validation';
 
 function profile(overrides: Partial<Profile> = {}): Profile {
@@ -87,6 +93,96 @@ describe('email validation', () => {
 });
 
 describe('profile validation', () => {
+  it('keeps legacy appearance values optional and supports resetting them to automatic', () => {
+    expect(validateProfile(profile())).toBeNull();
+    expect(validateProfile(profile({ appearance: {} }))).toBeNull();
+    expect(
+      validateProfile(profile({ appearance: { textColor: undefined, avatarSize: undefined } })),
+    ).toBeNull();
+  });
+
+  it.each(Object.entries(appearanceNumbers))(
+    'requires integer values within the supported range for %s',
+    (key, [minimum, maximum]) => {
+      for (const value of [minimum, maximum])
+        expect(validateProfile(profile({ appearance: { [key]: value } }))).toBeNull();
+      for (const value of [
+        minimum - 1,
+        maximum + 1,
+        minimum + 0.5,
+        NaN,
+        Infinity,
+        String(minimum),
+        null,
+      ])
+        expect(validateProfile(profile({ appearance: { [key]: value } }))).toEqual(
+          expect.any(String),
+        );
+    },
+  );
+
+  it.each(appearanceColors)('only accepts six-digit hex colors for %s', (key) => {
+    for (const value of ['#000000', '#FFFFFF', '#aBc123'])
+      expect(validateProfile(profile({ appearance: { [key]: value } }))).toBeNull();
+    for (const value of [
+      '',
+      '#fff',
+      '#ffffff00',
+      'red',
+      'var(--text)',
+      'url(https://example.com/x)',
+      '#123456;display:none',
+      null,
+      123456,
+    ])
+      expect(validateProfile(profile({ appearance: { [key]: value } }))).toEqual(
+        expect.any(String),
+      );
+  });
+
+  it.each(Object.entries(appearanceEnums))(
+    'only accepts supported options for %s',
+    (key, values) => {
+      for (const value of values)
+        expect(validateProfile(profile({ appearance: { [key]: value } }))).toBeNull();
+      for (const value of ['', 'unlisted', null, {}, true, 'url(https://example.com/font.woff2)'])
+        expect(validateProfile(profile({ appearance: { [key]: value } }))).toEqual(
+          expect.any(String),
+        );
+    },
+  );
+
+  it('does not coerce numeric font weights from strings or accept intermediate weights', () => {
+    for (const headingWeight of ['700', 650, 900])
+      expect(
+        validateProfile(profile({ appearance: { headingWeight } } as unknown as Partial<Profile>)),
+      ).toEqual(expect.any(String));
+  });
+
+  it.each(appearanceBooleans)('requires an actual boolean for %s', (key) => {
+    for (const value of [true, false])
+      expect(validateProfile(profile({ appearance: { [key]: value } }))).toBeNull();
+    for (const value of ['true', 'false', 0, 1, null])
+      expect(validateProfile(profile({ appearance: { [key]: value } }))).toEqual(
+        expect.any(String),
+      );
+  });
+
+  it('rejects arbitrary appearance fields and malformed appearance containers', () => {
+    for (const appearance of [
+      null,
+      [],
+      'automatic',
+      { css: 'body{display:none}' },
+      { background: '#ffffff' },
+      { unknown: undefined },
+    ]) {
+      const input = profile({ appearance } as unknown as Partial<Profile>);
+      expect(() => validateProfile(input)).not.toThrow();
+      expect(validateProfile(input)).toEqual(expect.any(String));
+    }
+  });
+
   it('accepts owned uploaded pictures, background settings, and WhatsApp links', () => {
     const saved = profile();
     const source = `media:${saved.id}/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.webp`;

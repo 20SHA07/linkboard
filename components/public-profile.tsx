@@ -8,6 +8,7 @@ import type { Profile } from '@/lib/types';
 import ProfileCard, { ProfileBackground, profileThemeStyle } from '@/components/profile-card';
 import QRCode from '@/components/qr-code';
 import { publicProfileUrl } from '@/lib/urls';
+import { profileAppearanceStyles } from '@/lib/appearance';
 
 export default function PublicProfile({ username }: { username: string }) {
   const [retry, setRetry] = useState(0);
@@ -63,7 +64,9 @@ export default function PublicProfile({ username }: { username: string }) {
     }
   }
 
-  const background = profile ? profileThemeStyle(profile) : undefined;
+  const appearance = profile ? profileAppearanceStyles(profile) : undefined;
+  const background = profile ? { ...profileThemeStyle(profile), ...appearance?.page } : undefined;
+  const showBranding = profile?.appearance?.showBranding !== false;
 
   return (
     <div
@@ -74,17 +77,20 @@ export default function PublicProfile({ username }: { username: string }) {
         source={profile?.appearance?.backgroundImageUrl}
         position={profile?.appearance?.backgroundPosition}
         overlay={profile?.appearance?.backgroundOverlay}
+        fit={profile?.appearance?.backgroundFit}
       />
-      <header className="public-header">
-        <Link href="/" className="public-wordmark">
-          <Link2 size={23} strokeWidth={2.3} aria-hidden="true" />
-          linkboard<span className="public-wordmark-dot">.</span>
-        </Link>
-        <Link href="/" className="public-create-link">
-          Make it yours <ArrowUpRight size={15} aria-hidden="true" />
-        </Link>
-      </header>
-      <main className="public-main">
+      {showBranding && (
+        <header className="public-header">
+          <Link href="/" className="public-wordmark">
+            <Link2 size={23} strokeWidth={2.3} aria-hidden="true" />
+            linkboard<span className="public-wordmark-dot">.</span>
+          </Link>
+          <Link href="/" className="public-create-link">
+            Make it yours <ArrowUpRight size={15} aria-hidden="true" />
+          </Link>
+        </header>
+      )}
+      <main className="public-main" style={appearance?.content}>
         {loading ? (
           <div className="public-loading" role="status">
             <div className="public-skeleton-avatar" />
@@ -128,34 +134,42 @@ export default function PublicProfile({ username }: { username: string }) {
                 });
               }}
             />
-            <section className="public-share" aria-labelledby="share-heading">
-              <div className="public-share-copy">
-                <span className="public-share-eyebrow">Good things are worth sharing</span>
-                <h2 id="share-heading">Take this page with you.</h2>
-                <p>Scan the code to open this page, or save it for later.</p>
-                <button className="public-copy-button" type="button" onClick={() => void copyUrl()}>
-                  {copied ? (
-                    <Check size={15} aria-hidden="true" />
-                  ) : (
-                    <Copy size={15} aria-hidden="true" />
+            {profile.appearance?.showQrCode !== false && (
+              <section className="public-share" aria-labelledby="share-heading">
+                <div className="public-share-copy">
+                  <span className="public-share-eyebrow">Good things are worth sharing</span>
+                  <h2 id="share-heading">Take this page with you.</h2>
+                  <p>Scan the code to open this page, or save it for later.</p>
+                  <button
+                    className="public-copy-button"
+                    type="button"
+                    onClick={() => void copyUrl()}
+                  >
+                    {copied ? (
+                      <Check size={15} aria-hidden="true" />
+                    ) : (
+                      <Copy size={15} aria-hidden="true" />
+                    )}
+                    {copied ? 'Copied!' : 'Copy page link'}
+                  </button>
+                  <span className="visually-hidden" role="status">
+                    {copied ? 'Profile link copied to clipboard.' : ''}
+                  </span>
+                  {copyError && (
+                    <p className="public-copy-error" role="status">
+                      Copy this link: <a href={url}>{url}</a>
+                    </p>
                   )}
-                  {copied ? 'Copied!' : 'Copy page link'}
-                </button>
-                <span className="visually-hidden" role="status">
-                  {copied ? 'Profile link copied to clipboard.' : ''}
-                </span>
-                {copyError && (
-                  <p className="public-copy-error" role="status">
-                    Copy this link: <a href={url}>{url}</a>
-                  </p>
-                )}
-              </div>
-              {url && <QRCode url={url} name={profile.username} size={136} />}
-            </section>
+                </div>
+                {url && <QRCode url={url} name={profile.username} size={136} />}
+              </section>
+            )}
           </>
         )}
       </main>
-      <footer className="public-footer">A little corner of the internet. All yours.</footer>
+      {showBranding && (
+        <footer className="public-footer">A little corner of the internet. All yours.</footer>
+      )}
     </div>
   );
 }
